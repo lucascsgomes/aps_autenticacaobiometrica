@@ -1,0 +1,19 @@
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      dotnet:
+        patterns: ["*"]
+
+  - package-ecosystem: pip
+    directory: /face-service
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

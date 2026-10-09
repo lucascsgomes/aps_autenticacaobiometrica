@@ -1,5 +1,9 @@
 # Banco com autenticação facial
 
+[![CI](https://github.com/lucascsgomes/aps_autenticacaobiometrica/actions/workflows/ci.yml/badge.svg)](https://github.com/lucascsgomes/aps_autenticacaobiometrica/actions/workflows/ci.yml)
+![.NET 10](https://img.shields.io/badge/.NET-10-512BD4)
+![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB)
+
 Banco digital fictício (dinheiro de mentira) em que o **login** e a **confirmação de transferência** podem ser feitos com **reconhecimento facial** ou, quando a câmera não é possível ou o rosto falha, com a **senha da conta**. O mesmo app roda no navegador e no celular, e o rosto cadastrado fica na nuvem, então vale em qualquer dispositivo sem cadastrar de novo.
 
 Trabalho da APS (faculdade) e projeto de portfólio.
@@ -33,18 +37,47 @@ A API é a única que fala com o banco e com o `face-service`. Os detalhes, os d
 
 | Pasta | Conteúdo |
 |---|---|
-| `face-service/` | autenticador facial em Python (hoje ainda o menu de terminal original) |
+| `src/Banco.Dominio` | regras de negócio puras (hoje: `Dinheiro` em centavos) |
+| `src/Banco.Infra` | implementações de infraestrutura (banco, cliente do face-service) |
+| `src/Banco.Contratos` | DTOs compartilhados entre API e clientes |
+| `src/Banco.Api` | API ASP.NET Core (`/health`, `/ready`, erros em Problem Details) |
+| `tests/` | testes unitários e de integração (a API sobe inteira em memória) |
+| `face-service/` | microserviço de reconhecimento facial em Python (FastAPI + OpenCV) |
 | `docs/` | briefing, arquitetura, modelo de dados, contratos de API, segurança e plano de ondas |
 
-As pastas da solution .NET entram nas próximas ondas do [plano](docs/06-plano-de-ondas.md).
+Os projetos de front (Blazor Web e MAUI) e o banco entram nas próximas ondas do [plano](docs/06-plano-de-ondas.md).
 
-## Como rodar hoje
+## Como rodar
 
-Só o `face-service` roda por enquanto. As instruções (Python 3.12, download dos modelos e uso do menu) estão em [`face-service/README.md`](face-service/README.md).
+Não precisa de Docker. Você só precisa de **.NET SDK 10** e **Python 3.12**.
+
+**API (.NET)**
+
+```powershell
+dotnet test Banco.sln                      # testes unitários e de integração
+dotnet run --project src/Banco.Api         # abre http://localhost:5080/ready
+```
+
+**Microserviço facial (Python)** (os modelos YuNet e SFace são baixados uma vez, veja o [README do serviço](face-service/README.md))
+
+```powershell
+cd face-service
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m pytest
+$env:FACE_INTERNAL_KEY = "chave-de-desenvolvimento"
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --port 7860
+```
+
+No Linux e no macOS, troque `.\.venv\Scripts\python.exe` por `.venv/bin/python` e `$env:X = "v"` por `export X=v`.
+
+## Integração contínua
+
+A cada push e pull request, o GitHub Actions faz o build da solution (aviso vira erro), roda os testes da API, o `ruff` e o `pytest` do `face-service`, e constrói a imagem Docker do serviço para conferir `/ready` com os modelos reais. O Dependabot sugere atualização semanal de NuGet, pip e Actions.
 
 ## Status
 
-Em construção, por ondas. Onda 1: fundação do repositório, esqueleto dos projetos e CI.
+Em construção, por ondas. Pronto até aqui: repositório e esteira de CI, solution .NET com primeira regra de domínio testada, API no ar com health checks, e o autenticador facial transformado em microserviço HTTP com enroll e verify. Próximo: banco de dados em nuvem, ledger e cadastro de usuários.
 
 ## Limitações
 

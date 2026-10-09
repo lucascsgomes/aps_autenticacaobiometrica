@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: API (.NET)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Build (avisos viram erro)
+        run: dotnet build Banco.sln --configuration Release
+
+      - name: Testes (unitários e integração)
+        run: dotnet test Banco.sln --configuration Release --no-build --logger "trx;LogFileName=resultado.trx"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: resultados-api
+          path: "**/TestResults/*.trx"
+          if-no-files-found: ignore
+
+  face:
+    name: face-service (Python)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: face-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: face-service/requirements-dev.txt
+
+      - run: pip install -r requirements-dev.txt
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Testes (pytest)
+        run: pytest -q
+
+  face-imagem:
+    name: face-service (imagem Docker)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Valida o Dockerfile e o download dos modelos, que o ambiente local não consegue testar.
+      - name: Build da imagem
+        run: docker build -t face-service:ci face-service
+
+      - name: Sobe a imagem e confere /ready com os modelos reais
+        run: |
+          docker run -d --name face -p 7860:7860 -e FACE_INTERNAL_KEY=ci face-service:ci
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:7860/internal/v1/ready && exit 0
+            sleep 1
+          done
+          docker logs face
+          exit 1
