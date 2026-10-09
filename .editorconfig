@@ -24,3 +24,7 @@ max_line_length = 100
 
 [*.{cmd,bat,ps1}]
 end_of_line = crlf
+
+[tests/**.cs]
+# Nomes de teste descritivos usam sublinhado.
+dotnet_diagnostic.CA1707.severity = none
