@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,3 +23,14 @@ class ConfiguracaoProcessamento:
                 continue
             if not isinstance(valor, str) or valor not in opcoes:
                 raise ErroBiometria(f"Configuração inexistente: {valor!r}. Opções: {', '.join(opcoes)}")
+
+
+# --- Configuração do serviço HTTP (lida do ambiente, nunca do código) ---
+LIMITE_IMAGEM_BYTES = 2 * 1024 * 1024
+LARGURA_MAXIMA_PX = 640
+LIMIAR_MINIMO, LIMIAR_MAXIMO = 0.300, 0.900
+
+
+def chaves_internas():
+    """Chave atual e (opcional) anterior, para rotação sem parada. Vazio = rotas biométricas fechadas."""
+    return [k for k in (os.environ.get("FACE_INTERNAL_KEY"), os.environ.get("FACE_INTERNAL_KEY_PREV")) if k]

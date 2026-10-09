@@ -1,0 +1,25 @@
+[project]
+name = "face-service"
+version = "1.0.0"
+description = "Microserviço de reconhecimento facial (YuNet + SFace) do banco com autenticação biométrica"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = [".venv", "modelos", "resultados"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+# Depends/File nos argumentos é o idioma do FastAPI.
+ignore = ["B008"]
+
+[tool.ruff.lint.per-file-ignores]
+# Código herdado do autenticador original: só estilo, sem mudança de comportamento.
+# O código novo (app/, tests/) segue todas as regras.
+"{biometria,processamento,visualizacao,banco}/**" = ["I001", "E501", "B904"]
+"{cli,sistema,config}.py" = ["I001", "E501", "B904"]

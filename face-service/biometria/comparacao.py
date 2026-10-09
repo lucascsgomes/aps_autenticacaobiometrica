@@ -18,5 +18,5 @@ def comparar(modelo_sface, caracteristicas_a, caracteristicas_b):
     return score
 
 
-def corresponde(score):
-    return score >= THRESHOLD_COSINE
+def corresponde(score, limiar=THRESHOLD_COSINE):
+    return score >= limiar

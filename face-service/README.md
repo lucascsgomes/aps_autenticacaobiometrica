@@ -2,9 +2,32 @@
 
 Cadastro e autenticação facial por imagens locais, usando Python, OpenCV, YuNet e SFace. Você escolhe a operação, o identificador e a foto pelo terminal.
 
+> **Neste monorepo** o código também roda como **microserviço HTTP** (FastAPI), chamado pela API do banco. O menu de terminal descrito abaixo continua funcionando (`cli.py`). Veja [Modo serviço](#modo-serviço-http) logo abaixo.
+
+## Modo serviço (HTTP)
+
+Serviço sem estado: não acessa banco e **não grava a imagem**. O vetor facial sai na resposta do `enroll` e volta na requisição do `verify`; quem guarda é a API do banco. Contrato completo em [`docs/04-contratos-api.md`](../docs/04-contratos-api.md), seção 4.
+
+| Rota | O que faz | Chave |
+|---|---|---|
+| `GET /internal/v1/health` | processo vivo | não |
+| `GET /internal/v1/ready` | `200` se YuNet e SFace carregaram, senão `503` | não |
+| `POST /internal/v1/face/enroll` | `image` (multipart) → vetor `embedding_b64` (128 floats) | `X-Internal-Key` |
+| `POST /internal/v1/face/verify` | `image` + `reference_b64` + `threshold` opcional → `match` e `score` | `X-Internal-Key` |
+
+Para rodar localmente (Python 3.12, modelos já baixados em `modelos/` conforme os passos abaixo):
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+$env:FACE_INTERNAL_KEY = "uma-chave-qualquer-de-desenvolvimento"
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --port 7860
+```
+
+Testes e lint: `.\.venv\Scripts\python.exe -m pytest` e `.\.venv\Scripts\python.exe -m ruff check .`. Sem `FACE_INTERNAL_KEY` configurada, as rotas biométricas respondem `401` (falha fechada). Imagem de até 2 MB, reduzida para 640 px de largura antes da detecção. Há um `Dockerfile` para a hospedagem na nuvem, que baixa os modelos no build.
+
 ## Antes de começar
 
-Baixe ou clone o projeto e abra sua pasta no VS Code. Use **Terminal → Novo Terminal**. Todos os comandos abaixo devem ser executados na pasta que contém `main.py` e `requirements.txt`.
+Baixe ou clone o projeto e abra sua pasta no VS Code. Use **Terminal → Novo Terminal**. Todos os comandos abaixo devem ser executados na pasta que contém `cli.py` e `requirements.txt`.
 
 É necessário Python **3.12** instalado (64 bits no Windows). Se ainda não tiver, instale antes de continuar: [downloads do Python](https://www.python.org/downloads/). No Linux, a instalação também deve incluir suporte a `venv`; o pacote correspondente depende da distribuição.
 
@@ -43,7 +66,7 @@ Espere cada download terminar. Se `curl` não estiver instalado, use os links da
 **5. Só agora inicie o programa:**
 
 ```bash
-.venv/bin/python main.py
+.venv/bin/python cli.py
 ```
 
 ## Windows — primeira execução (PowerShell)
@@ -81,7 +104,7 @@ Espere cada download terminar. Os modelos são os mesmos usados no Linux.
 **5. Só agora inicie o programa:**
 
 ```powershell
-.\.venv\Scripts\python.exe main.py
+.\.venv\Scripts\python.exe cli.py
 ```
 
 Cada computador precisa criar sua própria `.venv`. Não copie a do Linux para o Windows. No VS Code, escolha `.venv\Scripts\python.exe` como interpretador no Windows. Os comandos acima já usam esse executável diretamente: não é necessário ativar o ambiente ou mudar a política do PowerShell.
@@ -93,13 +116,13 @@ Depois de concluir a instalação, abra o terminal na pasta do projeto e execute
 Linux:
 
 ```bash
-.venv/bin/python main.py
+.venv/bin/python cli.py
 ```
 
 Windows (PowerShell):
 
 ```powershell
-.\.venv\Scripts\python.exe main.py
+.\.venv\Scripts\python.exe cli.py
 ```
 
 ## Como usar o menu
@@ -163,7 +186,7 @@ Consulte as licenças nas pastas oficiais do [YuNet](https://github.com/opencv/o
 
 ## Arquivos do projeto
 
-- `main.py`: menu e entradas manuais.
+- `cli.py`: menu e entradas manuais (antigo `main.py`).
 - `sistema.py`: cadastro, autenticação e resultados.
 - `config.py`: configuração do processamento.
 - `erros.py`: exceção de domínio.
@@ -174,7 +197,7 @@ Consulte as licenças nas pastas oficiais do [YuNet](https://github.com/opencv/o
 - `requirements.txt`: OpenCV headless 4.11.0.86 e NumPy 2.2.6.
 - `.gitignore`: exclui ambiente virtual, caches, modelos, fotos, resultados e configurações locais.
 
-As pastas Python usam pacotes de namespace, sem precisar de arquivos `__init__.py` vazios. Execute `main.py` pela raiz do projeto conforme os comandos acima.
+As pastas Python usam pacotes de namespace, sem precisar de arquivos `__init__.py` vazios. Execute `cli.py` pela raiz do projeto conforme os comandos acima.
 
 ## Limitações
 

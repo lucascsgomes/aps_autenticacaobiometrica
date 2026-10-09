@@ -44,3 +44,17 @@ class Etapas:
             for px, py in face[4:14].reshape(5, 2):
                 cv2.circle(desenho, (round(float(px)), round(float(py))), 3, (0, 0, 255), -1)
         self.salvar('05_deteccao', desenho)
+
+
+class EtapasNulas:
+    """Mesma interface de `Etapas`, sem gravar nada. Usada pelo serviço HTTP:
+    a foto da pessoa nunca vai para o disco."""
+
+    def registrar(self, texto):
+        pass
+
+    def salvar(self, nome, imagem):
+        pass
+
+    def salvar_deteccao(self, imagem_bgr, faces):
+        pass

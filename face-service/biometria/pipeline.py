@@ -6,7 +6,7 @@ from config import RAIZ, ConfiguracaoProcessamento
 from erros import ErroBiometria, ErroInterno
 from processamento.pre_processamento import PRE_PROCESSAMENTOS
 from processamento.tratamento_ruido import TRATAMENTOS_RUIDO
-from visualizacao.etapas import Etapas
+from visualizacao.etapas import Etapas, EtapasNulas
 from biometria.detector import DetectorFacial
 from biometria.reconhecimento import ReconhecedorFacial
 
@@ -48,27 +48,7 @@ class PipelineFacial:
             self.configuracao.validar()
             origem, original = carregar_imagem(caminho_imagem)
             etapas = Etapas(self.pasta_resultados, self.configuracao, origem, identificador, operacao)
-            etapas.salvar('01_original', original)
-            cinza = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY)
-            etapas.salvar('02_cinza', cinza)
-            pre = PRE_PROCESSAMENTOS[self.configuracao.pre_processamento](cinza)
-            etapas.salvar('03_pre_processamento', pre)
-            processada = pre
-            if self.configuracao.tratamento_ruido is not None:
-                processada = TRATAMENTOS_RUIDO[self.configuracao.tratamento_ruido](pre)
-                etapas.salvar('04_tratamento_ruido', processada)
-            entrada = cv2.cvtColor(processada, cv2.COLOR_GRAY2BGR)
-            faces = self.detector.detectar(entrada)
-            etapas.salvar_deteccao(entrada, faces)
-            if len(faces) == 0:
-                raise ErroBiometria('Nenhum rosto encontrado. Tire outra foto de frente, com o rosto alinhado e próximo à câmera.')
-            if len(faces) != 1:
-                raise ErroBiometria(f'Mais de uma face encontrada ({len(faces)}); é necessário exatamente um rosto.')
-            # A detecção e o alinhamento usam a mesma imagem, sem desenhos.
-            alinhado = self.reconhecedor.alinhar(entrada, faces[0])
-            etapas.salvar('06_rosto_alinhado', alinhado)
-            vetor = self.reconhecedor.extrair(alinhado)
-            etapas.registrar('Extração concluída. Características mantidas somente em memória.')
+            vetor = self._extrair(original, etapas)
             return AmostraFacial(vetor, origem, etapas.pasta)
         except (ErroBiometria, OSError, cv2.error) as erro:
             if etapas is not None:
@@ -79,3 +59,37 @@ class PipelineFacial:
             if isinstance(erro, ErroBiometria):
                 raise
             raise ErroInterno(str(erro)) from erro
+
+    def extrair_de_imagem(self, original):
+        """Caminho do serviço: imagem já decodificada em memória, nada gravado em disco."""
+        try:
+            self.configuracao.validar()
+            return self._extrair(original, EtapasNulas())
+        except cv2.error as erro:
+            raise ErroInterno(str(erro)) from erro
+
+    def _extrair(self, original, etapas):
+        etapas.salvar('01_original', original)
+        cinza = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY)
+        etapas.salvar('02_cinza', cinza)
+        pre = PRE_PROCESSAMENTOS[self.configuracao.pre_processamento](cinza)
+        etapas.salvar('03_pre_processamento', pre)
+        processada = pre
+        if self.configuracao.tratamento_ruido is not None:
+            processada = TRATAMENTOS_RUIDO[self.configuracao.tratamento_ruido](pre)
+            etapas.salvar('04_tratamento_ruido', processada)
+        entrada = cv2.cvtColor(processada, cv2.COLOR_GRAY2BGR)
+        faces = self.detector.detectar(entrada)
+        etapas.salvar_deteccao(entrada, faces)
+        if len(faces) == 0:
+            raise ErroBiometria('Nenhum rosto encontrado. Tire outra foto de frente, com o rosto alinhado e próximo à câmera.',
+                                codigo='NO_FACE_DETECTED')
+        if len(faces) != 1:
+            raise ErroBiometria(f'Mais de uma face encontrada ({len(faces)}); é necessário exatamente um rosto.',
+                                codigo='MULTIPLE_FACES')
+        # A detecção e o alinhamento usam a mesma imagem, sem desenhos.
+        alinhado = self.reconhecedor.alinhar(entrada, faces[0])
+        etapas.salvar('06_rosto_alinhado', alinhado)
+        vetor = self.reconhecedor.extrair(alinhado)
+        etapas.registrar('Extração concluída. Características mantidas somente em memória.')
+        return vetor
