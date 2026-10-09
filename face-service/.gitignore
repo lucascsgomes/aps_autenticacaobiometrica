@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.py[cod]
+modelos/
+imagens/
+resultados/
+.env
+.env.*
+.codex/
+.agents/
+.aws/
+.DS_Store
+Thumbs.db
