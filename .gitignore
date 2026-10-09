@@ -1,0 +1,44 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+TestResults/
+*.binlog
+publish/
+
+# MAUI
+Platforms/**/bin/
+Platforms/**/obj/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Modelos, fotos e resultados do face-service
+face-service/modelos/
+face-service/imagens/
+face-service/resultados/
+
+# Segredos e ambiente local
+.env
+.env.*
+!.env.example
+appsettings.Development.json
+*.pfx
+
+# Editores e SO
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+
+# Ferramentas locais
+.claude/
+.codex/
+.agents/
