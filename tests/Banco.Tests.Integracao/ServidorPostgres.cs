@@ -36,8 +36,10 @@ internal static class ServidorPostgres
         return conexao;
     }
 
-    public static BancoDbContext Contexto(string conexao) =>
-        new(new DbContextOptionsBuilder<BancoDbContext>().UseNpgsql(conexao).UseSnakeCaseNamingConvention().Options);
+    public static DbContextOptions<BancoDbContext> Opcoes(string conexao) =>
+        new DbContextOptionsBuilder<BancoDbContext>().UseNpgsql(conexao).UseSnakeCaseNamingConvention().Options;
+
+    public static BancoDbContext Contexto(string conexao) => new(Opcoes(conexao));
 
     private static string Conexao(int porta, string banco) =>
         $"Host=localhost;Port={porta};Database={banco};Username=postgres;Password=postgres;Pooling=false;Command Timeout=120";

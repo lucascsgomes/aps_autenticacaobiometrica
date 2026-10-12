@@ -114,6 +114,159 @@ namespace Banco.Infra.Persistencia.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Banco.Dominio.Transferencias.Lancamento", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<Guid>("ContaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("conta_id");
+
+                    b.Property<DateTimeOffset>("CriadoEm")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("criado_em");
+
+                    b.Property<long>("SaldoAposCentavos")
+                        .HasColumnType("bigint")
+                        .HasColumnName("saldo_apos_centavos");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasColumnType("char(1)")
+                        .HasColumnName("tipo");
+
+                    b.Property<Guid>("TransferenciaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transferencia_id");
+
+                    b.Property<long>("ValorCentavos")
+                        .HasColumnType("bigint")
+                        .HasColumnName("valor_centavos");
+
+                    b.HasKey("Id")
+                        .HasName("pk_lancamentos");
+
+                    b.HasIndex("ContaId", "CriadoEm", "Id")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("ix_lanc_extrato");
+
+                    b.HasIndex("TransferenciaId", "ContaId", "Tipo")
+                        .IsUnique()
+                        .HasDatabaseName("uq_lancamento_perna");
+
+                    b.ToTable("lancamentos", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_lancamentos_tipo", "tipo IN ('D', 'C')");
+
+                            t.HasCheckConstraint("ck_lancamentos_valor", "valor_centavos > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Banco.Dominio.Transferencias.Transferencia", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ConcluidaEm")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("concluida_em");
+
+                    b.Property<Guid>("ContaDestinoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("conta_destino_id");
+
+                    b.Property<Guid>("ContaOrigemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("conta_origem_id");
+
+                    b.Property<DateTimeOffset>("CriadaEm")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("criada_em");
+
+                    b.Property<string>("Descricao")
+                        .HasColumnType("text")
+                        .HasColumnName("descricao");
+
+                    b.Property<string>("E2eId")
+                        .HasColumnType("text")
+                        .HasColumnName("e2e_id");
+
+                    b.Property<string>("MetodoConfirmacao")
+                        .HasColumnType("text")
+                        .HasColumnName("metodo_confirmacao");
+
+                    b.Property<string>("MotivoFalha")
+                        .HasColumnType("text")
+                        .HasColumnName("motivo_falha");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("PIX")
+                        .HasColumnName("tipo");
+
+                    b.Property<long>("ValorCentavos")
+                        .HasColumnType("bigint")
+                        .HasColumnName("valor_centavos");
+
+                    b.HasKey("Id")
+                        .HasName("pk_transferencias");
+
+                    b.HasIndex("CriadaEm")
+                        .HasDatabaseName("ix_transf_pendentes")
+                        .HasFilter("status = 'PENDENTE_BIOMETRIA'");
+
+                    b.HasIndex("E2eId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_transferencia_e2e");
+
+                    b.HasIndex("ContaDestinoId", "CriadaEm")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_transf_destino_data");
+
+                    b.HasIndex("ContaOrigemId", "ConcluidaEm")
+                        .HasDatabaseName("ix_transf_limite")
+                        .HasFilter("status = 'CONCLUIDA' AND tipo IN ('PIX', 'TED')");
+
+                    b.HasIndex("ContaOrigemId", "CriadaEm")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_transf_origem_data");
+
+                    b.ToTable("transferencias", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_conclusao", "(status = 'CONCLUIDA') = (concluida_em IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_contas_diferentes", "conta_origem_id <> conta_destino_id");
+
+                            t.HasCheckConstraint("ck_falha_tem_motivo", "(status = 'FALHA') = (motivo_falha IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_transferencias_descricao", "length(descricao) <= 140");
+
+                            t.HasCheckConstraint("ck_transferencias_e2e", "e2e_id ~ '^E[0-9]{8}[0-9]{12}[A-Za-z0-9]{11}$'");
+
+                            t.HasCheckConstraint("ck_transferencias_metodo", "metodo_confirmacao IN ('FACE', 'SENHA')");
+
+                            t.HasCheckConstraint("ck_transferencias_status", "status IN ('PENDENTE_BIOMETRIA', 'PROCESSANDO', 'CONCLUIDA', 'FALHA', 'EXPIRADA')");
+
+                            t.HasCheckConstraint("ck_transferencias_tipo", "tipo IN ('PIX', 'TED', 'CREDITO_INICIAL')");
+
+                            t.HasCheckConstraint("ck_transferencias_valor", "valor_centavos > 0");
+                        });
+                });
+
             modelBuilder.Entity("Banco.Dominio.Usuarios.Usuario", b =>
                 {
                     b.Property<Guid>("Id")
@@ -215,6 +368,40 @@ namespace Banco.Infra.Persistencia.Migrations
                         .WithMany()
                         .HasForeignKey("UsuarioId")
                         .HasConstraintName("fk_contas_usuarios_usuario_id");
+                });
+
+            modelBuilder.Entity("Banco.Dominio.Transferencias.Lancamento", b =>
+                {
+                    b.HasOne("Banco.Dominio.Contas.Conta", null)
+                        .WithMany()
+                        .HasForeignKey("ContaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_lancamentos_contas_conta_id");
+
+                    b.HasOne("Banco.Dominio.Transferencias.Transferencia", null)
+                        .WithMany()
+                        .HasForeignKey("TransferenciaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_lancamentos_transferencias_transferencia_id");
+                });
+
+            modelBuilder.Entity("Banco.Dominio.Transferencias.Transferencia", b =>
+                {
+                    b.HasOne("Banco.Dominio.Contas.Conta", null)
+                        .WithMany()
+                        .HasForeignKey("ContaDestinoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_transferencias_contas_conta_destino_id");
+
+                    b.HasOne("Banco.Dominio.Contas.Conta", null)
+                        .WithMany()
+                        .HasForeignKey("ContaOrigemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_transferencias_contas_conta_origem_id");
                 });
 #pragma warning restore 612, 618
         }

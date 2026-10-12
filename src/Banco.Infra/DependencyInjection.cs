@@ -1,7 +1,9 @@
 using Banco.Infra.Persistencia;
+using Banco.Infra.Transferencias;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Banco.Infra;
 
@@ -17,6 +19,9 @@ public static class DependencyInjection
         servicos.AddDbContext<BancoDbContext>(o => o
             .UseNpgsql(string.IsNullOrWhiteSpace(conexao) ? "Host=indefinido" : conexao)
             .UseSnakeCaseNamingConvention());
+
+        servicos.TryAddSingleton(TimeProvider.System);
+        servicos.AddScoped<ExecutorDeTransferencia>();
 
         return servicos;
     }

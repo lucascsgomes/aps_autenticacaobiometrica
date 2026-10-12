@@ -37,8 +37,8 @@ A API é a única que fala com o banco e com o `face-service`. Os detalhes de ar
 
 | Pasta | Conteúdo |
 |---|---|
-| `src/Banco.Dominio` | regras de negócio puras (`Dinheiro` em centavos, `Usuario`, `Conta`) |
-| `src/Banco.Infra` | EF Core + PostgreSQL (mapeamento, migrations); depois, o cliente do face-service |
+| `src/Banco.Dominio` | regras de negócio puras (`Dinheiro` em centavos, `Usuario`, `Conta`, `Transferencia` com máquina de estados, `Lancamento`) |
+| `src/Banco.Infra` | EF Core + PostgreSQL (mapeamento, migrations, `ExecutorDeTransferencia`); depois, o cliente do face-service |
 | `src/Banco.Contratos` | DTOs compartilhados entre API e clientes |
 | `src/Banco.Api` | API ASP.NET Core (`/health`, `/ready` que checa o banco, erros em Problem Details) |
 | `tests/` | testes unitários e de integração (a API sobe inteira em memória, com PostgreSQL real embutido) |
@@ -84,13 +84,21 @@ $env:FACE_INTERNAL_KEY = "chave-de-desenvolvimento"
 
 No Linux e no macOS, troque `.\.venv\Scripts\python.exe` por `.venv/bin/python` e `$env:X = "v"` por `export X=v`.
 
+## Como o dinheiro é protegido
+
+- **Dinheiro em centavos** (`long`), nunca ponto flutuante.
+- **Ledger de partida dobrada**: cada transferência grava um débito e um crédito em `lancamentos`. O saldo da conta é só um cache, e a conciliação confere que ele bate com a soma do ledger.
+- **O banco impõe as regras, não só o código**: saldo de cliente nunca negativo (`CHECK`), lançamentos imutáveis (trigger bloqueia `UPDATE`, `DELETE` e `TRUNCATE`), transições de estado válidas (trigger, com histórico) e débitos iguais a créditos conferidos no `COMMIT` (constraint trigger deferida).
+- **Concorrência**: o `ExecutorDeTransferencia` trava a transferência e as duas contas com `SELECT ... ORDER BY id FOR UPDATE`. A ordem fixa evita deadlock entre A para B e B para A, e uma repetição cobre `40P01` e `40001`.
+- **Provado em teste, em PostgreSQL real**: 50 transferências simultâneas de R$ 10 contra R$ 100 concluem exatamente 10, e 400 transferências cruzadas terminam sem perder um centavo. Toda conciliação ao fim dos cenários dá zero.
+
 ## Integração contínua
 
 A cada push e pull request, o GitHub Actions faz o build da solution (aviso vira erro), roda os testes da API, o `ruff` e o `pytest` do `face-service`, e constrói a imagem Docker do serviço para conferir `/ready` com os modelos reais. O Dependabot sugere atualização semanal de NuGet, pip e Actions.
 
 ## Status
 
-Em construção, por ondas. Pronto até aqui: repositório e esteira de CI, solution .NET com primeira regra de domínio testada, API no ar com health checks, o autenticador facial transformado em microserviço HTTP com enroll e verify, e o PostgreSQL com tabelas de usuários e contas (regras também como constraints no banco, provadas em teste). Próximo: ledger de lançamentos, transferências e cadastro de usuários.
+Em construção, por ondas. Pronto até aqui: repositório e esteira de CI, solution .NET com primeira regra de domínio testada, API no ar com health checks, o autenticador facial transformado em microserviço HTTP com enroll e verify, o PostgreSQL com usuários, contas, transferências e ledger de partida dobrada (regras como constraints e triggers, provadas sob concorrência). Próximo: cadastro, login com senha e rosto, e a transferência com confirmação.
 
 ## Limitações
 

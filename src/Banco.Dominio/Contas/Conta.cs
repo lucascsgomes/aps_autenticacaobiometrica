@@ -23,7 +23,7 @@ public sealed class Conta
     public string Agencia { get; private set; } = AgenciaPadrao;
     public string Numero { get; private set; } = default!;
 
-    /// <summary>Saldo materializado em centavos. Só o ledger (próxima etapa) vai alterá-lo.</summary>
+    /// <summary>Saldo materializado em centavos. Só Debitar e Creditar o alteram, dentro da transação do ledger.</summary>
     public long SaldoCentavos { get; private set; }
 
     public long LimiteDiurnoCentavos { get; private set; } = 500_000;
@@ -52,6 +52,16 @@ public sealed class Conta
     /// <summary>Contrapartida do crédito inicial fictício: dinheiro não surge do nada no ledger.</summary>
     public static Conta AbrirDoSistema(string numero, DateTimeOffset agora) =>
         Nova(TipoConta.Sistema, null, numero, agora);
+
+    /// <summary>Só a conta de sistema pode ficar negativa: é a contrapartida do dinheiro fictício.</summary>
+    public bool PodeDebitar(Dinheiro valor) => Tipo == TipoConta.Sistema || SaldoCentavos >= valor.Centavos;
+
+    public void Debitar(Dinheiro valor) =>
+        SaldoCentavos = PodeDebitar(valor)
+            ? checked(SaldoCentavos - valor.Centavos)
+            : throw new InvalidOperationException("Saldo insuficiente.");
+
+    public void Creditar(Dinheiro valor) => SaldoCentavos = checked(SaldoCentavos + valor.Centavos);
 
     private static Conta Nova(TipoConta tipo, Guid? usuarioId, string numero, DateTimeOffset agora)
     {
