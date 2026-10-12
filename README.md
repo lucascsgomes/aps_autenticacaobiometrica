@@ -31,21 +31,20 @@ Banco.Mobile (MAUI) ─────┘                   │
 | Banco | PostgreSQL em nuvem |
 | Reconhecimento facial | Python, OpenCV, YuNet (detecção) e SFace (vetor facial), comparação por Cosine |
 
-A API é a única que fala com o banco e com o `face-service`. Os detalhes, os diagramas e as decisões estão em [`docs/`](docs/README.md).
+A API é a única que fala com o banco e com o `face-service`. Os detalhes de arquitetura, contratos de API e segurança ficam na documentação de projeto, mantida localmente por enquanto.
 
 ## Estrutura do repositório
 
 | Pasta | Conteúdo |
 |---|---|
-| `src/Banco.Dominio` | regras de negócio puras (hoje: `Dinheiro` em centavos) |
-| `src/Banco.Infra` | implementações de infraestrutura (banco, cliente do face-service) |
+| `src/Banco.Dominio` | regras de negócio puras (`Dinheiro` em centavos, `Usuario`, `Conta`) |
+| `src/Banco.Infra` | EF Core + PostgreSQL (mapeamento, migrations); depois, o cliente do face-service |
 | `src/Banco.Contratos` | DTOs compartilhados entre API e clientes |
-| `src/Banco.Api` | API ASP.NET Core (`/health`, `/ready`, erros em Problem Details) |
-| `tests/` | testes unitários e de integração (a API sobe inteira em memória) |
+| `src/Banco.Api` | API ASP.NET Core (`/health`, `/ready` que checa o banco, erros em Problem Details) |
+| `tests/` | testes unitários e de integração (a API sobe inteira em memória, com PostgreSQL real embutido) |
 | `face-service/` | microserviço de reconhecimento facial em Python (FastAPI + OpenCV) |
-| `docs/` | briefing, arquitetura, modelo de dados, contratos de API, segurança e plano de ondas |
 
-Os projetos de front (Blazor Web e MAUI) e o banco entram nas próximas ondas do [plano](docs/06-plano-de-ondas.md).
+Os projetos de front (Blazor Web e MAUI) entram nas próximas ondas.
 
 ## Como rodar
 
@@ -57,6 +56,20 @@ Não precisa de Docker. Você só precisa de **.NET SDK 10** e **Python 3.12**.
 dotnet test Banco.sln                      # testes unitários e de integração
 dotnet run --project src/Banco.Api         # abre http://localhost:5080/ready
 ```
+
+Os testes de integração sobem um **PostgreSQL 17 embutido** (baixado na primeira execução), então não precisam de Docker nem de conta na nuvem.
+
+**Banco de dados (PostgreSQL na nuvem, ex.: Neon)**
+
+A connection string nunca vai para o repositório. Guarde nos *user-secrets* e aplique as migrations:
+
+```powershell
+dotnet user-secrets set "ConnectionStrings:Banco" "Host=...;Database=...;Username=...;Password=...;SSL Mode=Require" --project src/Banco.Api
+dotnet tool restore
+dotnet ef database update --project src/Banco.Infra --startup-project src/Banco.Api
+```
+
+Sem a connection string a API sobe, mas `/ready` responde 503 (`/health` continua 200).
 
 **Microserviço facial (Python)** (os modelos YuNet e SFace são baixados uma vez, veja o [README do serviço](face-service/README.md))
 
@@ -77,7 +90,7 @@ A cada push e pull request, o GitHub Actions faz o build da solution (aviso vira
 
 ## Status
 
-Em construção, por ondas. Pronto até aqui: repositório e esteira de CI, solution .NET com primeira regra de domínio testada, API no ar com health checks, e o autenticador facial transformado em microserviço HTTP com enroll e verify. Próximo: banco de dados em nuvem, ledger e cadastro de usuários.
+Em construção, por ondas. Pronto até aqui: repositório e esteira de CI, solution .NET com primeira regra de domínio testada, API no ar com health checks, o autenticador facial transformado em microserviço HTTP com enroll e verify, e o PostgreSQL com tabelas de usuários e contas (regras também como constraints no banco, provadas em teste). Próximo: ledger de lançamentos, transferências e cadastro de usuários.
 
 ## Limitações
 

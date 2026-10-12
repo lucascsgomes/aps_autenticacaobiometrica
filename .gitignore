@@ -42,3 +42,6 @@ Thumbs.db
 .claude/
 .codex/
 .agents/
+
+# Documentação de projeto (local, não versionada)
+docs/

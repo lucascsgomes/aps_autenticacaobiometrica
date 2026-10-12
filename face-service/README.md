@@ -6,7 +6,7 @@ Cadastro e autenticação facial por imagens locais, usando Python, OpenCV, YuNe
 
 ## Modo serviço (HTTP)
 
-Serviço sem estado: não acessa banco e **não grava a imagem**. O vetor facial sai na resposta do `enroll` e volta na requisição do `verify`; quem guarda é a API do banco. Contrato completo em [`docs/04-contratos-api.md`](../docs/04-contratos-api.md), seção 4.
+Serviço sem estado: não acessa banco e **não grava a imagem**. O vetor facial sai na resposta do `enroll` e volta na requisição do `verify`; quem guarda é a API do banco. As rotas abaixo seguem o contrato interno entre a API e o serviço.
 
 | Rota | O que faz | Chave |
 |---|---|---|

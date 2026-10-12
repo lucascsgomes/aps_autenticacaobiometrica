@@ -20,6 +20,18 @@ public class SaudeTests(ApiFactory fabrica) : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task Ready_responde_503_sem_vazar_detalhe_quando_o_banco_nao_responde()
+    {
+        await using var semBanco = new ApiFactory { ConexaoForcada = "Host=localhost;Port=1;Database=x;Username=x;Password=segredo-do-banco;Timeout=2" };
+
+        var resposta = await semBanco.CreateClient().GetAsync(new Uri("/ready", UriKind.Relative));
+        var corpo = await resposta.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, resposta.StatusCode);
+        Assert.DoesNotContain("segredo-do-banco", corpo, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Excecao_nao_tratada_vira_problem_details_sem_vazar_detalhe()
     {
         var resposta = await _cliente.GetAsync(new Uri(ApiFactory.RotaQueFalha, UriKind.Relative));

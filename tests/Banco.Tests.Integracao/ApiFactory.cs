@@ -10,8 +10,16 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
 {
     public const string RotaQueFalha = "/__teste/falha";
 
-    protected override void ConfigureWebHost(IWebHostBuilder builder) =>
+    // Sempre sobrescreve a conexão: sem isso os user-secrets de quem roda os testes apontariam para o Neon.
+    private readonly string _conexao = ServidorPostgres.CriarBancoAsync().GetAwaiter().GetResult();
+
+    public string? ConexaoForcada { get; init; }
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.UseSetting("ConnectionStrings:Banco", ConexaoForcada ?? _conexao);
         builder.ConfigureServices(s => s.AddTransient<IStartupFilter, FiltroDeRotaQueFalha>());
+    }
 
     private sealed class FiltroDeRotaQueFalha : IStartupFilter
     {
