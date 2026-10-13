@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Banco.Dominio;
+using Banco.Dominio.Chaves;
 using Banco.Dominio.Contas;
 using Banco.Dominio.Transferencias;
 using Banco.Dominio.Usuarios;
@@ -58,6 +59,7 @@ public sealed class ServicoDeCadastro(BancoDbContext banco, ServicoDeSenha senha
         await using var transacao = await banco.Database.BeginTransactionAsync(cancelamento);
         banco.Usuarios.Add(usuario);
         banco.Contas.Add(conta);
+        banco.Chaves.Add(ChaveTransferencia.Criar(conta.Id, TipoChave.Cpf, usuario.Cpf, agora));
 
         if (concluirSemRosto)
         {

@@ -35,4 +35,4 @@ public sealed record RegistrarResponse(Guid UsuarioId, ContaResumoDto Conta, str
 
 public sealed record TitularDto(string Nome);
 
-public sealed record ContaMeResponse(Guid Id, string Agencia, string Numero, string Status, long SaldoCentavos, TitularDto Titular);
+public sealed record ContaMeResponse(Guid Id, string Agencia, string Numero, string Status, long SaldoCentavos, TitularDto Titular, IReadOnlyList<ChaveDto> Chaves);

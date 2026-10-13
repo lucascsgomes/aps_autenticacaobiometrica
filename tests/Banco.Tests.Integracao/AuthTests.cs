@@ -27,7 +27,7 @@ public class AuthTests(ApiFactory fabrica) : IClassFixture<ApiFactory>
     }
 
     /// <summary>Gera um CPF com os dois dígitos verificadores corretos a partir de um número de 9 dígitos.</summary>
-    private static string CpfValido(int n)
+    internal static string CpfValido(int n)
     {
         var digitos = (100_000_000 + n).ToString(CultureInfo.InvariantCulture).Select(c => c - '0').ToList();
         for (var tamanho = 9; tamanho <= 10; tamanho++)

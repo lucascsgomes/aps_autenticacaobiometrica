@@ -19,3 +19,7 @@ public sealed class ContaBloqueadaException(TimeSpan tentarEm) : NegocioExceptio
 }
 
 public sealed class NaoAutenticadoException() : NegocioException("UNAUTHORIZED", "Sessão inválida ou expirada.");
+
+public sealed class ChaveNaoEncontradaException() : NegocioException("KEY_NOT_FOUND", "Chave não encontrada.");
+
+public sealed class ChaveInvalidaException() : NegocioException("INVALID_KEY_FORMAT", "A chave não tem um formato válido.");

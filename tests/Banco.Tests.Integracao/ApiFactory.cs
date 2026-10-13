@@ -20,9 +20,13 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
     /// <summary>Liga o cadastro sem rosto (modo de desenvolvimento). Desligado, o cadastro fica pendente.</summary>
     public bool CadastroSemRosto { get; init; } = true;
 
+    /// <summary>Multiplica os limites de requisição. Alto por padrão, para os testes não esbarrarem no rate limit.</summary>
+    public int FatorDeLimite { get; init; } = 1000;
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("ConnectionStrings:Banco", ConexaoForcada ?? _conexao);
+        builder.UseSetting("RateLimit:Fator", FatorDeLimite.ToString(System.Globalization.CultureInfo.InvariantCulture));
         builder.UseSetting("Jwt:Chave", ChaveJwt);
         builder.UseSetting("Auth:CadastroSemRosto", CadastroSemRosto ? "true" : "false");
         builder.ConfigureServices(s => s.AddTransient<IStartupFilter, FiltroDeRotaQueFalha>());

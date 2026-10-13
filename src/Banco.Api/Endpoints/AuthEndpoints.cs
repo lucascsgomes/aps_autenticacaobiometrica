@@ -14,10 +14,10 @@ internal static class AuthEndpoints
     public static IEndpointRouteBuilder MapearAuth(this IEndpointRouteBuilder rotas)
     {
         var auth = rotas.MapGroup("/v1/auth");
-        auth.MapPost("/register", Registrar);
-        auth.MapPost("/login/senha", LoginComSenha);
-        auth.MapPost("/refresh", Renovar);
-        auth.MapPost("/logout", Sair);
+        auth.MapPost("/register", Registrar).RequireRateLimiting(Limites.Publico);
+        auth.MapPost("/login/senha", LoginComSenha).RequireRateLimiting(Limites.Biometria);
+        auth.MapPost("/refresh", Renovar).RequireRateLimiting(Limites.Publico);
+        auth.MapPost("/logout", Sair).RequireRateLimiting(Limites.Publico);
         return rotas;
     }
 

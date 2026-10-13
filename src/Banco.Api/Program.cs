@@ -22,6 +22,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 builder.Services.AddAuthorization();
 
+builder.Services.AdicionarLimites(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<TratadorGlobalDeExcecoes>();
 builder.Services.AdicionarInfra(builder.Configuration);
@@ -34,6 +35,7 @@ app.UseExceptionHandler();
 app.UseStatusCodePages();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.MapearSaude();
 app.MapearAuth();
 app.MapearContas();

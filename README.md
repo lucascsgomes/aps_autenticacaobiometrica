@@ -116,11 +116,16 @@ No Linux e no macOS, troque `.\.venv\Scripts\python.exe` por `.venv/bin/python` 
 | `POST /v1/auth/login/senha` | Entrada por CPF e senha. Resposta idêntica para CPF inexistente, senha errada e cadastro pendente; 5 falhas bloqueiam por 1, 2, 4, 8 e até 15 minutos, e o bloqueio só aparece a quem acerta a senha |
 | `POST /v1/auth/refresh` | Troca o refresh token por um novo. Usar um token já usado revoga a família inteira |
 | `POST /v1/auth/logout` | Revoga a família do refresh token |
-| `GET /v1/contas/me` | Dados e saldo da conta do usuário do token (a conta nunca vem da URL, então um usuário não alcança a de outro) |
+| `GET /v1/contas/me` | Dados, saldo e chaves (mascaradas) da conta do usuário do token. A conta nunca vem da URL, então um usuário não alcança a de outro |
+| `GET /v1/contas/me/extrato` | Lançamentos com saldo após cada linha e a contraparte mascarada. Cursor opaco `(criado_em, id)` sobre o índice do ledger, sem `OFFSET`; filtros `limit` (1 a 100), `de`, `ate` (fuso `America/Sao_Paulo`) e `tipo` (`D` ou `C`) |
+| `GET /v1/chaves/{valor}` | Consulta de destino: devolve só o nome mascarado (`Maria S***`) e se a chave é própria. `422 INVALID_KEY_FORMAT` e `404 KEY_NOT_FOUND` |
+| `DELETE /v1/contas/me/chaves/{id}` | Apaga uma chave da própria conta. Chave alheia responde igual a chave inexistente |
 
 - **JWT** HS256 de 15 minutos, validado com emissor, audiência, expiração e algoritmo fixo (`alg=none` e assinatura adulterada são recusados em teste).
 - **Refresh token** opaco de 32 bytes; no banco fica só o SHA-256, e cada login abre uma família rotativa de 7 dias.
 - **Senha** com `PasswordHasher` do ASP.NET Identity, e comparação sempre executada para igualar o tempo de resposta.
+- **Chaves de transferência**: todo cadastro cria a chave CPF. O valor é único no banco inteiro, o formato é checado na aplicação e por `CHECK`, e a tela nunca recebe o CPF completo. Cadastrar e-mail, celular e chave aleatória exige confirmação por rosto ou senha e entra junto com a biometria.
+- **Rate limit** (janela de 1 minuto, `429` com `Retry-After` e `code=RATE_LIMITED`): `login/senha` 5 por IP, `register`, `refresh` e `logout` 20 por IP, consulta de chave 10 e leituras 120 por usuário. `RateLimit:Fator` multiplica os limites (os testes usam 1000). Atrás de proxy, como no Render, defina `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`, senão todos os clientes chegam com o IP do proxy e dividem o mesmo limite.
 - **Erros** em Problem Details (RFC 9457) com um `code` estável (`INVALID_CREDENTIALS`, `ACCOUNT_LOCKED`, `REGISTRATION_CONFLICT`...).
 
 ## Integração contínua
@@ -129,7 +134,7 @@ A cada push e pull request, o GitHub Actions faz o build da solution (aviso vira
 
 ## Status
 
-Em construção, por ondas. Pronto até aqui: repositório e esteira de CI, solution .NET com primeira regra de domínio testada, API no ar com health checks, o autenticador facial transformado em microserviço HTTP com enroll e verify, o PostgreSQL com usuários, contas, transferências e ledger de partida dobrada (regras como constraints e triggers, provadas sob concorrência), e a API com cadastro, login por senha, JWT e refresh rotativo. Próximo: extrato, chaves, rate limit e a transferência com confirmação, depois o reconhecimento facial.
+Em construção, por ondas. Pronto até aqui: repositório e esteira de CI, solution .NET com primeira regra de domínio testada, API no ar com health checks, o autenticador facial transformado em microserviço HTTP com enroll e verify, o PostgreSQL com usuários, contas, transferências e ledger de partida dobrada (regras como constraints e triggers, provadas sob concorrência), e a API com cadastro, login por senha, JWT, refresh rotativo, extrato por cursor, chaves de transferência e rate limit. Próximo: transferência com confirmação, depois o reconhecimento facial.
 
 ## Limitações
 

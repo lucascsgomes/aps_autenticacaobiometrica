@@ -1,3 +1,4 @@
+using Banco.Dominio.Chaves;
 using Banco.Dominio.Contas;
 using Banco.Dominio.Transferencias;
 using Banco.Dominio.Usuarios;
@@ -12,6 +13,7 @@ public sealed class BancoDbContext(DbContextOptions<BancoDbContext> opcoes) : Db
     public DbSet<Transferencia> Transferencias => Set<Transferencia>();
     public DbSet<Lancamento> Lancamentos => Set<Lancamento>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<ChaveTransferencia> Chaves => Set<ChaveTransferencia>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) =>
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(BancoDbContext).Assembly);

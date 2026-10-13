@@ -35,6 +35,8 @@ internal sealed partial class TratadorGlobalDeExcecoes(
             CredenciaisInvalidasException => (StatusCodes.Status401Unauthorized, "Credenciais inválidas"),
             ContaBloqueadaException => (StatusCodes.Status403Forbidden, "Conta bloqueada"),
             NaoAutenticadoException => (StatusCodes.Status401Unauthorized, "Não autenticado"),
+            ChaveNaoEncontradaException => (StatusCodes.Status404NotFound, "Chave não encontrada"),
+            ChaveInvalidaException => (StatusCodes.Status422UnprocessableEntity, "Chave inválida"),
             _ => (StatusCodes.Status400BadRequest, "Requisição inválida"),
         };
 

@@ -22,6 +22,49 @@ namespace Banco.Infra.Persistencia.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Banco.Dominio.Chaves.ChaveTransferencia", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ContaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("conta_id");
+
+                    b.Property<DateTimeOffset>("CriadaEm")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("criada_em");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("tipo");
+
+                    b.Property<string>("Valor")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("valor");
+
+                    b.HasKey("Id")
+                        .HasName("pk_chaves_transferencia");
+
+                    b.HasIndex("ContaId")
+                        .HasDatabaseName("ix_chaves_conta");
+
+                    b.HasIndex("Valor")
+                        .IsUnique()
+                        .HasDatabaseName("uq_chave_valor");
+
+                    b.ToTable("chaves_transferencia", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_chave_formato", "(tipo = 'CPF' AND valor ~ '^[0-9]{11}$') OR\n(tipo = 'EMAIL' AND valor = lower(valor) AND valor ~ '^[^@\\s]+@[^@\\s]+$') OR\n(tipo = 'CELULAR' AND valor ~ '^\\+55[0-9]{10,11}$') OR\n(tipo = 'ALEATORIA' AND valor ~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')");
+
+                            t.HasCheckConstraint("ck_chave_tipo", "tipo IN ('CPF', 'EMAIL', 'CELULAR', 'ALEATORIA')");
+                        });
+                });
+
             modelBuilder.Entity("Banco.Dominio.Contas.Conta", b =>
                 {
                     b.Property<Guid>("Id")
@@ -423,6 +466,16 @@ namespace Banco.Infra.Persistencia.Migrations
 
                             t.HasCheckConstraint("ck_usuarios_status", "status IN ('CADASTRO_PENDENTE', 'ATIVO', 'BLOQUEADO', 'ENCERRADO')");
                         });
+                });
+
+            modelBuilder.Entity("Banco.Dominio.Chaves.ChaveTransferencia", b =>
+                {
+                    b.HasOne("Banco.Dominio.Contas.Conta", null)
+                        .WithMany()
+                        .HasForeignKey("ContaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_chaves_transferencia_contas_conta_id");
                 });
 
             modelBuilder.Entity("Banco.Dominio.Contas.Conta", b =>
