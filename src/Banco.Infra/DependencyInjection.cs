@@ -1,3 +1,5 @@
+using Banco.Infra.Autenticacao;
+using Banco.Infra.Cadastro;
 using Banco.Infra.Persistencia;
 using Banco.Infra.Transferencias;
 using Microsoft.EntityFrameworkCore;
@@ -22,6 +24,10 @@ public static class DependencyInjection
 
         servicos.TryAddSingleton(TimeProvider.System);
         servicos.AddScoped<ExecutorDeTransferencia>();
+        servicos.AddSingleton<ServicoDeSenha>();
+        servicos.AddScoped<RefreshTokenServico>();
+        servicos.AddScoped<ServicoDeAutenticacao>();
+        servicos.AddScoped<ServicoDeCadastro>();
 
         return servicos;
     }

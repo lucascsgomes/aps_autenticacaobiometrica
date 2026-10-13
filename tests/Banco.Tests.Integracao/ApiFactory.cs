@@ -15,9 +15,16 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
 
     public string? ConexaoForcada { get; init; }
 
+    public const string ChaveJwt = "chave-de-teste-com-mais-de-trinta-e-dois-bytes-123456";
+
+    /// <summary>Liga o cadastro sem rosto (modo de desenvolvimento). Desligado, o cadastro fica pendente.</summary>
+    public bool CadastroSemRosto { get; init; } = true;
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("ConnectionStrings:Banco", ConexaoForcada ?? _conexao);
+        builder.UseSetting("Jwt:Chave", ChaveJwt);
+        builder.UseSetting("Auth:CadastroSemRosto", CadastroSemRosto ? "true" : "false");
         builder.ConfigureServices(s => s.AddTransient<IStartupFilter, FiltroDeRotaQueFalha>());
     }
 

@@ -39,8 +39,8 @@ A API é a única que fala com o banco e com o `face-service`. Os detalhes de ar
 |---|---|
 | `src/Banco.Dominio` | regras de negócio puras (`Dinheiro` em centavos, `Usuario`, `Conta`, `Transferencia` com máquina de estados, `Lancamento`) |
 | `src/Banco.Infra` | EF Core + PostgreSQL (mapeamento, migrations, `ExecutorDeTransferencia`); depois, o cliente do face-service |
-| `src/Banco.Contratos` | DTOs compartilhados entre API e clientes |
-| `src/Banco.Api` | API ASP.NET Core (`/health`, `/ready` que checa o banco, erros em Problem Details) |
+| `src/Banco.Contratos` | DTOs compartilhados entre API e clientes (JSON em `snake_case`) |
+| `src/Banco.Api` | API ASP.NET Core: cadastro, login, refresh, conta, health checks e erros em Problem Details |
 | `tests/` | testes unitários e de integração (a API sobe inteira em memória, com PostgreSQL real embutido) |
 | `face-service/` | microserviço de reconhecimento facial em Python (FastAPI + OpenCV) |
 
@@ -71,6 +71,22 @@ dotnet ef database update --project src/Banco.Infra --startup-project src/Banco.
 
 Sem a connection string a API sobe, mas `/ready` responde 503 (`/health` continua 200).
 
+**Testando a API sem o reconhecimento facial**
+
+O cadastro de produção termina com a foto do rosto. Enquanto essa parte não existe, ligue o atalho de desenvolvimento (só vale em `Development`, é ignorado em qualquer outro ambiente):
+
+```powershell
+dotnet user-secrets set "Auth:CadastroSemRosto" "true" --project src/Banco.Api
+dotnet run --project src/Banco.Api
+```
+
+```powershell
+$corpo = '{"nome":"Ana Souza","cpf":"11144477735","email":"ana@exemplo.com","senha":"uma-senha-longa-e-unica","consentimento_biometrico":{"aceito":true,"versao_termo":"2026-10-v1"}}'
+Invoke-RestMethod http://localhost:5080/v1/auth/register -Method Post -Body $corpo -ContentType application/json   # conta com R$ 5.000 fictícios e sessão aberta
+```
+
+Sem `Jwt:Chave` configurada, em `Development` a API sorteia uma chave a cada início (os tokens morrem ao reiniciar). Fora de `Development` a chave é obrigatória e a API não sobe sem ela.
+
 **Microserviço facial (Python)** (os modelos YuNet e SFace são baixados uma vez, veja o [README do serviço](face-service/README.md))
 
 ```powershell
@@ -92,13 +108,28 @@ No Linux e no macOS, troque `.\.venv\Scripts\python.exe` por `.venv/bin/python` 
 - **Concorrência**: o `ExecutorDeTransferencia` trava a transferência e as duas contas com `SELECT ... ORDER BY id FOR UPDATE`. A ordem fixa evita deadlock entre A para B e B para A, e uma repetição cobre `40P01` e `40001`.
 - **Provado em teste, em PostgreSQL real**: 50 transferências simultâneas de R$ 10 contra R$ 100 concluem exatamente 10, e 400 transferências cruzadas terminam sem perder um centavo. Toda conciliação ao fim dos cenários dá zero.
 
+## Autenticação
+
+| Rota | O que faz |
+|---|---|
+| `POST /v1/auth/register` | Cria usuário (`CADASTRO_PENDENTE`) e conta, e registra o consentimento da biometria (LGPD). A conta só ativa quando o rosto for cadastrado |
+| `POST /v1/auth/login/senha` | Entrada por CPF e senha. Resposta idêntica para CPF inexistente, senha errada e cadastro pendente; 5 falhas bloqueiam por 1, 2, 4, 8 e até 15 minutos, e o bloqueio só aparece a quem acerta a senha |
+| `POST /v1/auth/refresh` | Troca o refresh token por um novo. Usar um token já usado revoga a família inteira |
+| `POST /v1/auth/logout` | Revoga a família do refresh token |
+| `GET /v1/contas/me` | Dados e saldo da conta do usuário do token (a conta nunca vem da URL, então um usuário não alcança a de outro) |
+
+- **JWT** HS256 de 15 minutos, validado com emissor, audiência, expiração e algoritmo fixo (`alg=none` e assinatura adulterada são recusados em teste).
+- **Refresh token** opaco de 32 bytes; no banco fica só o SHA-256, e cada login abre uma família rotativa de 7 dias.
+- **Senha** com `PasswordHasher` do ASP.NET Identity, e comparação sempre executada para igualar o tempo de resposta.
+- **Erros** em Problem Details (RFC 9457) com um `code` estável (`INVALID_CREDENTIALS`, `ACCOUNT_LOCKED`, `REGISTRATION_CONFLICT`...).
+
 ## Integração contínua
 
 A cada push e pull request, o GitHub Actions faz o build da solution (aviso vira erro), roda os testes da API, o `ruff` e o `pytest` do `face-service`, e constrói a imagem Docker do serviço para conferir `/ready` com os modelos reais. O Dependabot sugere atualização semanal de NuGet, pip e Actions.
 
 ## Status
 
-Em construção, por ondas. Pronto até aqui: repositório e esteira de CI, solution .NET com primeira regra de domínio testada, API no ar com health checks, o autenticador facial transformado em microserviço HTTP com enroll e verify, o PostgreSQL com usuários, contas, transferências e ledger de partida dobrada (regras como constraints e triggers, provadas sob concorrência). Próximo: cadastro, login com senha e rosto, e a transferência com confirmação.
+Em construção, por ondas. Pronto até aqui: repositório e esteira de CI, solution .NET com primeira regra de domínio testada, API no ar com health checks, o autenticador facial transformado em microserviço HTTP com enroll e verify, o PostgreSQL com usuários, contas, transferências e ledger de partida dobrada (regras como constraints e triggers, provadas sob concorrência), e a API com cadastro, login por senha, JWT e refresh rotativo. Próximo: extrato, chaves, rate limit e a transferência com confirmação, depois o reconhecimento facial.
 
 ## Limitações
 

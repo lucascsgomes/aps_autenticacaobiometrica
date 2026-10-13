@@ -267,6 +267,69 @@ namespace Banco.Infra.Persistencia.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Banco.Dominio.Usuarios.RefreshToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CriadoEm")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("criado_em");
+
+                    b.Property<DateTimeOffset>("ExpiraEm")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expira_em");
+
+                    b.Property<Guid>("FamiliaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("familia_id");
+
+                    b.Property<DateTimeOffset?>("RevogadoEm")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revogado_em");
+
+                    b.Property<Guid?>("SubstituidoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("substituido_por");
+
+                    b.Property<byte[]>("TokenHash")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("token_hash");
+
+                    b.Property<DateTimeOffset?>("UsadoEm")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("usado_em");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("usuario_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_refresh_tokens");
+
+                    b.HasIndex("FamiliaId")
+                        .HasDatabaseName("ix_refresh_familia");
+
+                    b.HasIndex("SubstituidoPor")
+                        .HasDatabaseName("ix_refresh_tokens_substituido_por");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("uq_refresh_hash");
+
+                    b.HasIndex("UsuarioId")
+                        .HasDatabaseName("ix_refresh_usuario")
+                        .HasFilter("revogado_em IS NULL");
+
+                    b.ToTable("refresh_tokens", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_refresh_hash", "octet_length(token_hash) = 32");
+                        });
+                });
+
             modelBuilder.Entity("Banco.Dominio.Usuarios.Usuario", b =>
                 {
                     b.Property<Guid>("Id")
@@ -402,6 +465,22 @@ namespace Banco.Infra.Persistencia.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_transferencias_contas_conta_origem_id");
+                });
+
+            modelBuilder.Entity("Banco.Dominio.Usuarios.RefreshToken", b =>
+                {
+                    b.HasOne("Banco.Dominio.Usuarios.RefreshToken", null)
+                        .WithMany()
+                        .HasForeignKey("SubstituidoPor")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_refresh_tokens_refresh_tokens_substituido_por");
+
+                    b.HasOne("Banco.Dominio.Usuarios.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_refresh_tokens_usuarios_usuario_id");
                 });
 #pragma warning restore 612, 618
         }

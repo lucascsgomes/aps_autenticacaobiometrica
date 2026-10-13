@@ -11,6 +11,7 @@ public sealed class BancoDbContext(DbContextOptions<BancoDbContext> opcoes) : Db
     public DbSet<Conta> Contas => Set<Conta>();
     public DbSet<Transferencia> Transferencias => Set<Transferencia>();
     public DbSet<Lancamento> Lancamentos => Set<Lancamento>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) =>
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(BancoDbContext).Assembly);

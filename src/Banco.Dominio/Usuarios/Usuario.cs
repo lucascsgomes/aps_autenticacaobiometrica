@@ -12,6 +12,9 @@ public enum StatusUsuario
 
 public sealed partial class Usuario
 {
+    public const int LimiteDeFalhas = 5;
+    public const int TetoDoBloqueioEmMinutos = 15;
+
     public Guid Id { get; private set; }
     public string Nome { get; private set; } = default!;
     public string Cpf { get; private set; } = default!;
@@ -71,6 +74,53 @@ public sealed partial class Usuario
             CriadoEm = agora,
             AtualizadoEm = agora,
         };
+    }
+
+    /// <summary>LGPD art. 11: o consentimento da biometria é específico e fica registrado com a versão do termo.</summary>
+    public void RegistrarConsentimentoBiometrico(string versaoTermo, DateTimeOffset agora)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(versaoTermo);
+        ConsentimentoBiometricoEm = agora;
+        VersaoTermoBiometria = versaoTermo;
+        AtualizadoEm = agora;
+    }
+
+    public void ConcluirCadastro(DateTimeOffset agora)
+    {
+        if (Status != StatusUsuario.CadastroPendente)
+        {
+            throw new InvalidOperationException("Só um cadastro pendente pode ser concluído.");
+        }
+
+        Status = StatusUsuario.Ativo;
+        CadastroConcluidoEm = agora;
+        AtualizadoEm = agora;
+    }
+
+    public bool EstaBloqueado(DateTimeOffset agora) => BloqueadoAte > agora;
+
+    /// <summary>A 5ª falha seguida bloqueia por 1 minuto; a partir daí o tempo dobra (2, 4, 8) até o teto de 15 minutos.</summary>
+    public void RegistrarFalhaDeCredencial(DateTimeOffset agora)
+    {
+        if (FalhasConsecutivas < short.MaxValue)
+        {
+            FalhasConsecutivas++;
+        }
+
+        if (FalhasConsecutivas >= LimiteDeFalhas)
+        {
+            var minutos = Math.Min(TetoDoBloqueioEmMinutos, 1 << Math.Min(FalhasConsecutivas - LimiteDeFalhas, 4));
+            BloqueadoAte = agora.AddMinutes(minutos);
+        }
+
+        AtualizadoEm = agora;
+    }
+
+    public void RegistrarCredencialCorreta(DateTimeOffset agora)
+    {
+        FalhasConsecutivas = 0;
+        BloqueadoAte = null;
+        AtualizadoEm = agora;
     }
 
     [GeneratedRegex("^[0-9]{11}$")]
