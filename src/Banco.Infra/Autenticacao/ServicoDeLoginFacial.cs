@@ -36,7 +36,7 @@ public sealed class ServicoDeLoginFacial(
 
     public async Task<SessaoEmitida> EntrarAsync(Guid desafioId, byte[] imagem, string? idDaRequisicao, CancellationToken cancelamento = default)
     {
-        var consumo = await desafios.ConsumirAsync(desafioId, FinalidadeDoDesafio.Login, MetodoDoDesafio.Face, cancelamento)
+        var consumo = await desafios.ConsumirAsync(desafioId, FinalidadeDoDesafio.Login, MetodoDoDesafio.Face, cancelamento: cancelamento)
             ?? throw new FaceNaoVerificadaException();
 
         // Sem dono, conta que não está ativa ou sem rosto cadastrado: mesma resposta de rosto errado, e o serviço facial nem é chamado.
@@ -50,17 +50,7 @@ public sealed class ServicoDeLoginFacial(
         var referencia = cifra.Decifrar(usuarioId, template.EmbeddingCifrado, template.Nonce);
         var agora = relogio.GetUtcNow();
 
-        ResultadoDaVerificacao resultado;
-        try
-        {
-            resultado = await facial.VerificarAsync(imagem, referencia, consumo.Limiar, idDaRequisicao, cancelamento);
-        }
-        catch (Exception e) when (e is RostoNaoDetectadoException or VariosRostosException or ImagemInvalidaException or ServicoFacialIndisponivelException)
-        {
-            // A foto não pôde ser avaliada: o desafio volta. Só o serviço fora do ar não conta como uma das 5 devoluções.
-            await desafios.DevolverAsync(desafioId, consumo, contar: e is not ServicoFacialIndisponivelException, CancellationToken.None);
-            throw;
-        }
+        var resultado = await desafios.VerificarAsync(facial, desafioId, consumo, imagem, referencia, idDaRequisicao, cancelamento);
 
         if (!resultado.Corresponde)
         {
@@ -89,5 +79,5 @@ public sealed class ServicoDeLoginFacial(
     }
 }
 
-/// <summary>Limiares do cosseno por finalidade. Login 0,363 (padrão do SFace); confirmação de transferência será mais rígida.</summary>
-public sealed record LimiaresFaciais(decimal Login);
+/// <summary>Limiares do cosseno por finalidade. Login 0,363 (padrão do SFace); confirmação de transferência 0,450 (mais rígida: é dinheiro).</summary>
+public sealed record LimiaresFaciais(decimal Login, decimal Transferencia);

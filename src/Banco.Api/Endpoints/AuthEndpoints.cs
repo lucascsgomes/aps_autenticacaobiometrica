@@ -16,8 +16,6 @@ internal static class AuthEndpoints
 {
     private const string MetodoSenha = "SENHA";
     private const string MetodoFace = "FACE";
-    private const int TamanhoMaximoDaImagem = 2 * 1024 * 1024;
-    private const int TamanhoMaximoDaRequisicao = TamanhoMaximoDaImagem + 64 * 1024;
     private const string CapturaFacial = "CAPTURA_FACIAL";
 
     public static IEndpointRouteBuilder MapearAuth(this IEndpointRouteBuilder rotas)
@@ -28,12 +26,12 @@ internal static class AuthEndpoints
         auth.MapPost("/login/desafio", AbrirDesafioDeLogin).RequireRateLimiting(Limites.Biometria);
         auth.MapPost("/login/face", LoginComRosto)
             .RequireRateLimiting(Limites.Biometria)
-            .WithMetadata(new RequestSizeLimitAttribute(TamanhoMaximoDaRequisicao));
+            .WithMetadata(new RequestSizeLimitAttribute(Imagens.TamanhoMaximoDaRequisicao));
         auth.MapPost("/login/senha", LoginComSenha).RequireRateLimiting(Limites.Biometria);
         auth.MapPost("/face/enroll", CadastrarRosto)
             .RequireAuthorization(JwtOpcoes.PoliticaDeCadastro)
             .RequireRateLimiting(Limites.Biometria)
-            .WithMetadata(new RequestSizeLimitAttribute(TamanhoMaximoDaRequisicao));
+            .WithMetadata(new RequestSizeLimitAttribute(Imagens.TamanhoMaximoDaRequisicao));
         auth.MapPost("/refresh", Renovar).RequireRateLimiting(Limites.Publico);
         auth.MapPost("/logout", Sair).RequireRateLimiting(Limites.Publico);
         return rotas;
@@ -90,31 +88,10 @@ internal static class AuthEndpoints
             return Results.Unauthorized();
         }
 
-        var imagem = LerImagem(await LerFormularioAsync(http.Request, cancelamento));
+        var imagem = Imagens.LerImagem(await Imagens.LerFormularioAsync(http.Request, cancelamento));
         var embedding = await facial.CadastrarAsync(imagem, http.TraceIdentifier, cancelamento);
         var sessao = await cadastro.ConcluirComRostoAsync(usuarioId, embedding, cancelamento);
         return Results.Json(MontarSessao(sessao, jwt, MetodoFace), statusCode: StatusCodes.Status201Created);
-    }
-
-    private static async Task<IFormCollection> LerFormularioAsync(HttpRequest requisicao, CancellationToken cancelamento) =>
-        requisicao.HasFormContentType ? await requisicao.ReadFormAsync(cancelamento) : throw new ImagemInvalidaException();
-
-    private static byte[] LerImagem(IFormCollection formulario)
-    {
-        if (formulario.Files.GetFile("image") is not { Length: > 0 } arquivo)
-        {
-            throw new ImagemInvalidaException();
-        }
-
-        if (arquivo.Length > TamanhoMaximoDaImagem)
-        {
-            throw new ImagemGrandeException();
-        }
-
-        using var fluxo = arquivo.OpenReadStream();
-        using var memoria = new MemoryStream((int)arquivo.Length);
-        fluxo.CopyTo(memoria);
-        return memoria.ToArray();
     }
 
     // Responde 200 com a mesma forma exista o CPF ou não: quem consulta não descobre quem tem conta nem quem tem rosto.
@@ -133,13 +110,13 @@ internal static class AuthEndpoints
     // Foto sem rosto ou com vários (422) devolve o desafio: dá para tirar outra foto com o mesmo desafio_id, até 5 vezes.
     private static async Task<IResult> LoginComRosto(HttpContext http, ServicoDeLoginFacial login, JwtEmissor jwt, CancellationToken cancelamento)
     {
-        var formulario = await LerFormularioAsync(http.Request, cancelamento);
+        var formulario = await Imagens.LerFormularioAsync(http.Request, cancelamento);
         if (!Guid.TryParse(formulario["desafio_id"], out var desafioId))
         {
             return Validacao.Problema(new Dictionary<string, string[]> { ["desafio_id"] = ["Informe o desafio recebido em login/desafio."] });
         }
 
-        var imagem = LerImagem(formulario);
+        var imagem = Imagens.LerImagem(formulario);
         var sessao = await login.EntrarAsync(desafioId, imagem, http.TraceIdentifier, cancelamento);
         return Results.Ok(MontarSessao(sessao, jwt, MetodoFace));
     }

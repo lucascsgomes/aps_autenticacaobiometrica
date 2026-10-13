@@ -1,6 +1,7 @@
 using System.Net;
 using Banco.Dominio;
 using Banco.Dominio.Biometria;
+using Banco.Dominio.Transferencias;
 using Banco.Infra.Persistencia;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -11,6 +12,9 @@ namespace Banco.Infra.Facial;
 
 /// <summary>Um desafio recém-consumido. <c>UsadoEm</c> é o carimbo gravado, que a devolução usa para só desfazer o próprio consumo.</summary>
 public sealed record DesafioConsumido(Guid? UsuarioId, decimal Limiar, DateTime UsadoEm);
+
+/// <summary>O que o desafio de uma operação precisa carregar para ser consumido: de quem, de qual transferência e o hash dela.</summary>
+public sealed record Amarra(Guid UsuarioId, Guid TransferenciaId, byte[] Hash);
 
 /// <summary>Abre, consome e devolve desafios. Consumir é um UPDATE atômico: dois usos simultâneos do mesmo desafio nunca passam os dois.</summary>
 public sealed class ServicoDeDesafios(BancoDbContext banco, TimeProvider relogio)
@@ -23,8 +27,45 @@ public sealed class ServicoDeDesafios(BancoDbContext banco, TimeProvider relogio
         return desafio;
     }
 
-    /// <summary>Nulo quando o desafio não existe, é de outra finalidade, venceu ou já foi usado: o chamador não distingue os casos.</summary>
-    public async Task<DesafioConsumido?> ConsumirAsync(Guid desafioId, FinalidadeDoDesafio finalidade, MetodoDoDesafio metodo, CancellationToken cancelamento = default)
+    /// <summary>
+    /// Um desafio por transferência (índice único): se ainda não foi usado, devolve o mesmo (sem zerar as devoluções já gastas,
+    /// e ele nunca vence antes da intenção, que nasceu antes); se já foi consumido, troca por um novo.
+    /// </summary>
+    public async Task<DesafioBiometrico> AbrirDeTransferenciaAsync(Guid usuarioId, Transferencia transferencia, decimal limiar, IPAddress? ip, CancellationToken cancelamento = default)
+    {
+        var existente = await banco.Desafios.AsNoTracking().SingleOrDefaultAsync(d => d.TransferenciaId == transferencia.Id, cancelamento);
+        if (existente is { UsadoEm: null })
+        {
+            return existente;
+        }
+
+        if (existente is not null)
+        {
+            // Já consumido sem fechar a transferência (ex.: conta bloqueada na hora): nasce outro.
+            await banco.Desafios.Where(d => d.Id == existente.Id).ExecuteDeleteAsync(cancelamento);
+        }
+
+        var desafio = DesafioBiometrico.AbrirDeTransferencia(usuarioId, transferencia, limiar, ip, relogio.GetUtcNow());
+        banco.Add(desafio);
+        try
+        {
+            await banco.SaveChangesAsync(cancelamento);
+        }
+        catch (DbUpdateException e) when (e.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            // Duas aberturas simultâneas: a outra ganhou, e o desafio dela vale igual.
+            banco.ChangeTracker.Clear();
+            return await banco.Desafios.AsNoTracking().SingleAsync(d => d.TransferenciaId == transferencia.Id, cancelamento);
+        }
+
+        return desafio;
+    }
+
+    /// <summary>
+    /// Nulo quando o desafio não existe, é de outra finalidade, venceu ou já foi usado: o chamador não distingue os casos.
+    /// Com <paramref name="amarra"/>, também exige o dono, a transferência e o hash gravados na abertura.
+    /// </summary>
+    public async Task<DesafioConsumido?> ConsumirAsync(Guid desafioId, FinalidadeDoDesafio finalidade, MetodoDoDesafio metodo, Amarra? amarra = null, CancellationToken cancelamento = default)
     {
         var agora = relogio.GetUtcNow();
         return await ExecutarAsync(
@@ -32,6 +73,8 @@ public sealed class ServicoDeDesafios(BancoDbContext banco, TimeProvider relogio
             UPDATE desafios_biometricos
                SET usado_em = @agora, metodo = @metodo
              WHERE id = @id AND finalidade = @finalidade AND usado_em IS NULL AND expira_em > @agora
+            """ + (amarra is null ? "" : " AND usuario_id = @usuario AND transferencia_id = @transferencia AND hash_operacao = @hash") + """
+
             RETURNING usuario_id, limiar_aplicado, usado_em
             """,
             cmd =>
@@ -40,8 +83,31 @@ public sealed class ServicoDeDesafios(BancoDbContext banco, TimeProvider relogio
                 cmd.Parameters.AddWithValue("metodo", Codigo.De(metodo));
                 cmd.Parameters.AddWithValue("id", desafioId);
                 cmd.Parameters.AddWithValue("finalidade", Codigo.De(finalidade));
+                if (amarra is not null)
+                {
+                    cmd.Parameters.AddWithValue("usuario", amarra.UsuarioId);
+                    cmd.Parameters.AddWithValue("transferencia", amarra.TransferenciaId);
+                    cmd.Parameters.AddWithValue("hash", amarra.Hash);
+                }
             },
             cancelamento);
+    }
+
+    /// <summary>
+    /// Compara a foto com a referência. Se a foto não pôde ser avaliada, o desafio volta antes de a falha seguir adiante:
+    /// só o serviço facial fora do ar não conta como uma das 5 devoluções.
+    /// </summary>
+    public async Task<ResultadoDaVerificacao> VerificarAsync(IClienteFacial facial, Guid desafioId, DesafioConsumido consumo, byte[] imagem, byte[] referencia, string? idDaRequisicao, CancellationToken cancelamento = default)
+    {
+        try
+        {
+            return await facial.VerificarAsync(imagem, referencia, consumo.Limiar, idDaRequisicao, cancelamento);
+        }
+        catch (Exception e) when (e is RostoNaoDetectadoException or VariosRostosException or ImagemInvalidaException or ServicoFacialIndisponivelException)
+        {
+            await DevolverAsync(desafioId, consumo, contar: e is not ServicoFacialIndisponivelException, CancellationToken.None);
+            throw;
+        }
     }
 
     /// <summary>

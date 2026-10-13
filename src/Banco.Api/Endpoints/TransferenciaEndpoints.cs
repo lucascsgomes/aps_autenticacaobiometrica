@@ -11,6 +11,7 @@ using Banco.Dominio.Transferencias;
 using Banco.Infra.Idempotencia;
 using Banco.Infra.Transferencias;
 using Microsoft.AspNetCore.Http.Json;
+using RequestSizeLimitAttribute = Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 
@@ -20,12 +21,17 @@ internal static class TransferenciaEndpoints
 {
     private const string CabecalhoIdempotencia = "Idempotency-Key";
     private const string EscopoConfirmar = "POST /v1/transferencias/{id}/confirmar";
+    private const string EscopoConfirmarComRosto = "POST /v1/transferencias/{id}/confirmar-face";
 
     public static IEndpointRouteBuilder MapearTransferencias(this IEndpointRouteBuilder rotas)
     {
         var grupo = rotas.MapGroup("/v1/transferencias").RequireAuthorization();
         grupo.MapPost("/intencoes", CriarIntencao).RequireRateLimiting(Limites.Transferencia);
         grupo.MapPost("/{id:guid}/confirmar", Confirmar).RequireRateLimiting(Limites.Transferencia);
+        grupo.MapPost("/{id:guid}/desafio", AbrirDesafio).RequireRateLimiting(Limites.Transferencia);
+        grupo.MapPost("/{id:guid}/confirmar-face", ConfirmarComRosto)
+            .RequireRateLimiting(Limites.Transferencia)
+            .WithMetadata(new RequestSizeLimitAttribute(Imagens.TamanhoMaximoDaRequisicao));
         grupo.MapGet("/{id:guid}", Situacao).RequireRateLimiting(Limites.Leitura);
         grupo.MapGet("/{id:guid}/comprovante", Comprovante).RequireRateLimiting(Limites.Leitura);
         return rotas;
@@ -73,9 +79,20 @@ internal static class TransferenciaEndpoints
                 i.ValorCentavos,
                 0,
                 i.SaldoAposCentavos),
-            $"Você está confirmando {Reais(i.ValorCentavos)} para {i.DestinoNomeMascarado}. Digite sua senha.",
-            [Codigo.De(MetodoConfirmacao.Senha)]);
+            $"Você está confirmando {Reais(i.ValorCentavos)} para {i.DestinoNomeMascarado}. " + (i.PodeUsarRosto ? "Olhe para a câmera ou digite sua senha." : "Digite sua senha."),
+            i.PodeUsarRosto ? [Codigo.De(MetodoConfirmacao.Face), Codigo.De(MetodoConfirmacao.Senha)] : [Codigo.De(MetodoConfirmacao.Senha)]);
         return Results.Json(resposta, statusCode: StatusCodes.Status201Created);
+    }
+
+    private static async Task<IResult> AbrirDesafio(Guid id, HttpContext http, ClaimsPrincipal usuario, ServicoDeTransferencia servico, CancellationToken cancelamento)
+    {
+        if (UsuarioDoToken(usuario) is not { } usuarioId)
+        {
+            return Results.Unauthorized();
+        }
+
+        var desafio = await servico.AbrirDesafioDeRostoAsync(usuarioId, id, http.Connection.RemoteIpAddress, cancelamento);
+        return Results.Ok(new DesafioResponse(desafio.Id, desafio.ExpiraEm, "Olhe para a câmera e toque em Confirmar."));
     }
 
     private static async Task<IResult> Confirmar(
@@ -94,19 +111,69 @@ internal static class TransferenciaEndpoints
             return Results.Unauthorized();
         }
 
-        var chave = http.Request.Headers[CabecalhoIdempotencia].ToString();
-        if (chave.Length is < 8 or > 255)
-        {
-            throw new ChaveDeIdempotenciaObrigatoriaException();
-        }
-
+        var chave = ChaveDeIdempotencia(http);
         if (string.IsNullOrEmpty(corpo?.Senha) || corpo.Senha.Length > Validacao.SenhaMaxima)
         {
             return Validacao.Problema(new Dictionary<string, string[]> { ["senha"] = ["Informe a senha."] });
         }
 
+        return await ConfirmarIdempotenteAsync(
+            http, id, usuarioId, chave, EscopoConfirmar, servico, idempotencia, jwt, json,
+            ct => servico.ConfirmarComSenhaAsync(usuarioId, id, corpo.Senha, ct),
+            cancelamento);
+    }
+
+    // Foto sem rosto ou com vários (422) e serviço facial fora do ar (503) deixam a transferência pendente: dá para tentar de novo.
+    private static async Task<IResult> ConfirmarComRosto(
+        Guid id,
+        HttpContext http,
+        ClaimsPrincipal usuario,
+        ServicoDeTransferencia servico,
+        ServicoDeIdempotencia idempotencia,
+        JwtOpcoes jwt,
+        IOptions<JsonOptions> json,
+        CancellationToken cancelamento)
+    {
+        if (UsuarioDoToken(usuario) is not { } usuarioId)
+        {
+            return Results.Unauthorized();
+        }
+
+        var chave = ChaveDeIdempotencia(http);
+        var formulario = await Imagens.LerFormularioAsync(http.Request, cancelamento);
+        if (!Guid.TryParse(formulario["desafio_id"], out var desafioId))
+        {
+            return Validacao.Problema(new Dictionary<string, string[]> { ["desafio_id"] = ["Informe o desafio recebido em transferencias/{id}/desafio."] });
+        }
+
+        var imagem = Imagens.LerImagem(formulario);
+        return await ConfirmarIdempotenteAsync(
+            http, id, usuarioId, chave, EscopoConfirmarComRosto, servico, idempotencia, jwt, json,
+            ct => servico.ConfirmarComRostoAsync(usuarioId, id, desafioId, imagem, http.TraceIdentifier, ct),
+            cancelamento);
+    }
+
+    private static string ChaveDeIdempotencia(HttpContext http)
+    {
+        var chave = http.Request.Headers[CabecalhoIdempotencia].ToString();
+        return chave.Length is < 8 or > 255 ? throw new ChaveDeIdempotenciaObrigatoriaException() : chave;
+    }
+
+    private static async Task<IResult> ConfirmarIdempotenteAsync(
+        HttpContext http,
+        Guid id,
+        Guid usuarioId,
+        string chave,
+        string escopo,
+        ServicoDeTransferencia servico,
+        ServicoDeIdempotencia idempotencia,
+        JwtOpcoes jwt,
+        IOptions<JsonOptions> json,
+        Func<CancellationToken, Task<Transferencia>> confirmar,
+        CancellationToken cancelamento)
+    {
         var opcoes = json.Value.SerializerOptions;
-        var reserva = await idempotencia.ReservarAsync(usuarioId, chave, EscopoConfirmar, ServicoDeIdempotencia.Hash(EscopoConfirmar, id), cancelamento);
+        var reserva = await idempotencia.ReservarAsync(usuarioId, chave, escopo, ServicoDeIdempotencia.Hash(escopo, id), cancelamento);
         switch (reserva.Situacao)
         {
             case SituacaoDaReserva.ChaveReusada:
@@ -121,7 +188,7 @@ internal static class TransferenciaEndpoints
         string conteudo;
         try
         {
-            var t = await servico.ConfirmarComSenhaAsync(usuarioId, id, corpo.Senha, cancelamento);
+            var t = await confirmar(cancelamento);
             if (t.Status == StatusTransferencia.Concluida)
             {
                 var comprovante = await servico.ObterComprovanteAsync(usuarioId, id, CancellationToken.None);
@@ -178,6 +245,7 @@ internal static class TransferenciaEndpoints
     private static NegocioException ErroDaFalha(string? motivo) => motivo switch
     {
         MotivoFalha.SenhaRecusada => new SenhaNaoVerificadaException(),
+        MotivoFalha.BiometriaRecusada => new FaceNaoVerificadaException(),
         MotivoFalha.SaldoInsuficiente => new SaldoInsuficienteException(),
         MotivoFalha.DestinoIndisponivel => new DestinoIndisponivelException(),
         MotivoFalha.LimiteNoturno => new LimiteNoturnoExcedidoException(),

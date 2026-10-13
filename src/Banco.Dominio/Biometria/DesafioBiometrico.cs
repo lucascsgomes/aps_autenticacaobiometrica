@@ -1,5 +1,7 @@
 using System.Net;
 using System.Security.Cryptography;
+using System.Text;
+using Banco.Dominio.Transferencias;
 
 namespace Banco.Dominio.Biometria;
 
@@ -59,6 +61,26 @@ public sealed class DesafioBiometrico
         UsuarioId = usuarioId,
         Finalidade = FinalidadeDoDesafio.Login,
         Nonce = RandomNumberGenerator.GetBytes(32),
+        LimiarAplicado = limiar,
+        CriadoEm = agora,
+        ExpiraEm = agora + Validade,
+        Ip = ip,
+    };
+
+    /// <summary>Amarra o desafio a esta transferência exata: outro usuário, outra transferência ou outro valor não o consomem.</summary>
+    public static byte[] HashDaTransferencia(Guid usuarioId, Transferencia t) =>
+        SHA256.HashData(Encoding.UTF8.GetBytes($"TRANSFERENCIA|{usuarioId}|{t.Id}|{t.ContaOrigemId}|{t.ContaDestinoId}|{t.ValorCentavos}"));
+
+    public static DesafioBiometrico AbrirDeTransferencia(Guid usuarioId, Transferencia t, decimal limiar, IPAddress? ip, DateTimeOffset agora) => new()
+    {
+        Id = Guid.NewGuid(),
+        UsuarioId = usuarioId,
+        Finalidade = FinalidadeDoDesafio.Transferencia,
+        Nonce = RandomNumberGenerator.GetBytes(32),
+        TransferenciaId = t.Id,
+        ValorCentavos = t.ValorCentavos,
+        ContaDestinoId = t.ContaDestinoId,
+        HashOperacao = HashDaTransferencia(usuarioId, t),
         LimiarAplicado = limiar,
         CriadoEm = agora,
         ExpiraEm = agora + Validade,

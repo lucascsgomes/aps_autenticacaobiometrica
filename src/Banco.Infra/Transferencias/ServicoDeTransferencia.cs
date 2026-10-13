@@ -1,8 +1,12 @@
+using System.Net;
 using Banco.Dominio;
+using Banco.Dominio.Biometria;
 using Banco.Dominio.Chaves;
 using Banco.Dominio.Contas;
 using Banco.Dominio.Transferencias;
+using Banco.Dominio.Usuarios;
 using Banco.Infra.Autenticacao;
+using Banco.Infra.Facial;
 using Banco.Infra.Persistencia;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,7 +20,8 @@ public sealed record IntencaoCriada(
     string DestinoNomeMascarado,
     string ChaveMascarada,
     long ValorCentavos,
-    long SaldoAposCentavos);
+    long SaldoAposCentavos,
+    bool PodeUsarRosto);
 
 public sealed record Parte(string Nome, string Agencia, string ContaMascarada, bool EhOCliente);
 
@@ -44,7 +49,15 @@ public sealed record SituacaoDaTransferencia(
     DateTimeOffset? ConcluidaEm,
     IReadOnlyList<EventoDeHistorico> Historico);
 
-public sealed class ServicoDeTransferencia(BancoDbContext banco, ExecutorDeTransferencia executor, ServicoDeSenha senhas, TimeProvider relogio)
+public sealed class ServicoDeTransferencia(
+    BancoDbContext banco,
+    ExecutorDeTransferencia executor,
+    ServicoDeSenha senhas,
+    ServicoDeDesafios desafios,
+    IClienteFacial facial,
+    CifraDeTemplate cifra,
+    LimiaresFaciais limiares,
+    TimeProvider relogio)
 {
     public const string NomeDaInstituicao = "Banco APS";
 
@@ -119,7 +132,8 @@ public sealed class ServicoDeTransferencia(BancoDbContext banco, ExecutorDeTrans
             Mascara.Nome(destino.Nome),
             Mascara.Chave(tipo, chaveDestino),
             valorCentavos,
-            origem.Conta.SaldoCentavos - valorCentavos);
+            origem.Conta.SaldoCentavos - valorCentavos,
+            await banco.Templates.AnyAsync(t => t.UsuarioId == usuarioId, cancelamento));
     }
 
     /// <summary>
@@ -128,8 +142,70 @@ public sealed class ServicoDeTransferencia(BancoDbContext banco, ExecutorDeTrans
     /// </summary>
     public async Task<Transferencia> ConfirmarComSenhaAsync(Guid usuarioId, Guid transferenciaId, string senha, CancellationToken cancelamento = default)
     {
-        var contaId = await banco.Contas.Where(c => c.UsuarioId == usuarioId).Select(c => c.Id).SingleAsync(cancelamento);
+        var contaId = await ContaDoUsuarioAsync(usuarioId, cancelamento);
+        return await ConfirmarAsync(usuarioId, contaId, transferenciaId, u => senhas.Verificar(u.SenhaHash, senha), MetodoConfirmacao.Senha, MotivoFalha.SenhaRecusada, cancelamento);
+    }
 
+    /// <summary>Abre (ou reaproveita) o desafio de rosto desta transferência. Só quem tem rosto cadastrado e só enquanto a intenção vale.</summary>
+    public async Task<DesafioBiometrico> AbrirDesafioDeRostoAsync(Guid usuarioId, Guid transferenciaId, IPAddress? ip, CancellationToken cancelamento = default)
+    {
+        var transferencia = await PendenteDoUsuarioAsync(usuarioId, transferenciaId, cancelamento);
+        if (!await banco.Templates.AnyAsync(t => t.UsuarioId == usuarioId, cancelamento))
+        {
+            throw new FaceNaoVerificadaException();
+        }
+
+        return await desafios.AbrirDeTransferenciaAsync(usuarioId, transferencia, limiares.Transferencia, ip, cancelamento);
+    }
+
+    /// <summary>
+    /// Confirma com o rosto, no limiar de transferência. Rosto errado gasta a intenção como a senha errada; foto sem rosto, com vários,
+    /// ilegível ou serviço facial fora do ar deixam a transferência pendente e devolvem o desafio.
+    /// </summary>
+    public async Task<Transferencia> ConfirmarComRostoAsync(Guid usuarioId, Guid transferenciaId, Guid desafioId, byte[] imagem, string? idDaRequisicao, CancellationToken cancelamento = default)
+    {
+        var transferencia = await PendenteDoUsuarioAsync(usuarioId, transferenciaId, cancelamento);
+        var consumo = await desafios.ConsumirAsync(
+                desafioId,
+                FinalidadeDoDesafio.Transferencia,
+                MetodoDoDesafio.Face,
+                new Amarra(usuarioId, transferenciaId, DesafioBiometrico.HashDaTransferencia(usuarioId, transferencia)),
+                cancelamento)
+            ?? throw new FaceNaoVerificadaException();
+
+        var template = await banco.Templates.AsNoTracking().SingleOrDefaultAsync(t => t.UsuarioId == usuarioId, cancelamento) ?? throw new FaceNaoVerificadaException();
+        var referencia = cifra.Decifrar(usuarioId, template.EmbeddingCifrado, template.Nonce);
+        var resultado = await desafios.VerificarAsync(facial, desafioId, consumo, imagem, referencia, idDaRequisicao, cancelamento);
+
+        return await ConfirmarAsync(usuarioId, transferencia.ContaOrigemId, transferenciaId, _ => resultado.Corresponde, MetodoConfirmacao.Face, MotivoFalha.BiometriaRecusada, cancelamento);
+    }
+
+    private Task<Guid> ContaDoUsuarioAsync(Guid usuarioId, CancellationToken cancelamento) =>
+        banco.Contas.Where(c => c.UsuarioId == usuarioId).Select(c => c.Id).SingleAsync(cancelamento);
+
+    /// <summary>Leitura sem trava, para decidir antes de gastar desafio ou foto. A que vale é a feita sob trava em <see cref="ConfirmarAsync"/>.</summary>
+    private async Task<Transferencia> PendenteDoUsuarioAsync(Guid usuarioId, Guid transferenciaId, CancellationToken cancelamento)
+    {
+        var contaId = await ContaDoUsuarioAsync(usuarioId, cancelamento);
+        var transferencia = await banco.Transferencias.AsNoTracking().SingleOrDefaultAsync(t => t.Id == transferenciaId && t.ContaOrigemId == contaId, cancelamento)
+            ?? throw new TransferenciaNaoEncontradaException();
+        if (transferencia.Status != StatusTransferencia.PendenteBiometria)
+        {
+            throw new TransferenciaNaoPendenteException();
+        }
+
+        return transferencia.Venceu(relogio.GetUtcNow()) ? throw new TransferenciaExpiradaException() : transferencia;
+    }
+
+    private async Task<Transferencia> ConfirmarAsync(
+        Guid usuarioId,
+        Guid contaId,
+        Guid transferenciaId,
+        Func<Usuario, bool> credencialConfere,
+        MetodoConfirmacao metodo,
+        string motivoDaRecusa,
+        CancellationToken cancelamento)
+    {
         await using (var transacao = await banco.Database.BeginTransactionAsync(cancelamento))
         {
             // Trava a linha: duas confirmações simultâneas da mesma transferência não passam juntas.
@@ -151,14 +227,14 @@ public sealed class ServicoDeTransferencia(BancoDbContext banco, ExecutorDeTrans
             }
 
             var usuario = await banco.Usuarios.SingleAsync(u => u.Id == usuarioId, cancelamento);
-            if (!senhas.Verificar(usuario.SenhaHash, senha))
+            if (!credencialConfere(usuario))
             {
                 if (!usuario.EstaBloqueado(agora))
                 {
                     usuario.RegistrarFalhaDeCredencial(agora);
                 }
 
-                transferencia.Falhar(MotivoFalha.SenhaRecusada);
+                transferencia.Falhar(motivoDaRecusa);
                 await banco.SaveChangesAsync(cancelamento);
                 await transacao.CommitAsync(cancelamento);
                 return transferencia;
@@ -170,7 +246,7 @@ public sealed class ServicoDeTransferencia(BancoDbContext banco, ExecutorDeTrans
             }
 
             usuario.RegistrarCredencialCorreta(agora);
-            transferencia.Confirmar(MetodoConfirmacao.Senha);
+            transferencia.Confirmar(metodo);
             await banco.SaveChangesAsync(cancelamento);
             await transacao.CommitAsync(cancelamento);
         }
