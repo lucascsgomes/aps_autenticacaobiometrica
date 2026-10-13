@@ -1,9 +1,14 @@
 @page "/entrar"
 @inject ApiBanco Api
+@inject SessaoApp Sessao
 @inject NavigationManager Navegacao
 
 <section class="cartao estreito">
     <h1>Entrar</h1>
+    @if (_aviso is not null)
+    {
+        <p class="aviso ok" role="status">@_aviso</p>
+    }
 
     @if (_desafio is null)
     {
@@ -47,10 +52,17 @@
     private string _cpf = "";
     private string _senha = "";
     private string? _erro;
+    private string? _aviso;
     private bool _ocupado;
     private bool _cameraPronta;
     private Guid? _desafio;
     private Camera? _camera;
+
+    protected override void OnInitialized()
+    {
+        _aviso = Sessao.Aviso;
+        Sessao.Aviso = null;
+    }
 
     private async Task EntrarComSenhaAsync()
     {

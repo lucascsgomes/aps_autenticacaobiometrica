@@ -1,0 +1,81 @@
+<div class="confirmacao">
+    <p>@Texto</p>
+
+    @if (_rosto)
+    {
+        <Camera @ref="_camera" OnPronta="() => _cameraPronta = true" />
+    }
+    else
+    {
+        <label>@RotuloDaSenha
+            <input @bind="_senha" type="password" autocomplete="current-password" />
+        </label>
+    }
+
+    @if (Erro is not null)
+    {
+        <p class="aviso erro" role="alert">@Erro</p>
+    }
+
+    <div class="acoes">
+        <button type="button" disabled="@(Ocupado || (_rosto && !_cameraPronta))" @onclick="ConfirmarAsync">@(Ocupado ? "Confirmando..." : "Confirmar")</button>
+        @if (PermiteRosto)
+        {
+            <button type="button" class="secundario" disabled="@Ocupado" @onclick="Alternar">@(_rosto ? "Usar a senha" : "Usar o rosto")</button>
+        }
+        <button type="button" class="link" disabled="@Ocupado" @onclick="OnCancelar">Cancelar</button>
+    </div>
+</div>
+
+@code {
+    private string _senha = "";
+    private bool _rosto;
+    private bool _cameraPronta;
+    private Camera? _camera;
+
+    [Parameter]
+    public string Texto { get; set; } = "Confirme com a senha ou com o rosto.";
+
+    [Parameter]
+    public string RotuloDaSenha { get; set; } = "Senha da conta";
+
+    /// <summary>Só quem já tem rosto cadastrado pode confirmar com ele.</summary>
+    [Parameter]
+    public bool PermiteRosto { get; set; }
+
+    [Parameter]
+    public bool Ocupado { get; set; }
+
+    [Parameter]
+    public string? Erro { get; set; }
+
+    [Parameter]
+    public EventCallback<Credencial> OnConfirmar { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancelar { get; set; }
+
+    private void Alternar()
+    {
+        _rosto = !_rosto;
+        _cameraPronta = false;
+    }
+
+    private async Task ConfirmarAsync()
+    {
+        if (_rosto)
+        {
+            var foto = await _camera!.CapturarAsync();
+            if (foto is not null)
+            {
+                await OnConfirmar.InvokeAsync(new Credencial(null, foto));
+            }
+        }
+        else if (!string.IsNullOrEmpty(_senha))
+        {
+            var senha = _senha;
+            _senha = "";
+            await OnConfirmar.InvokeAsync(new Credencial(senha, null));
+        }
+    }
+}

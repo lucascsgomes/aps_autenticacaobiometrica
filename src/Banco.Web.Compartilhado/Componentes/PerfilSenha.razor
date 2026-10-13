@@ -1,0 +1,85 @@
+@inject ApiBanco Api
+@inject SessaoApp Sessao
+@inject NavigationManager Navegacao
+
+<section class="cartao">
+    <h2>Senha</h2>
+
+    @if (!_confirmando)
+    {
+        <form @onsubmit="Continuar" @onsubmit:preventDefault>
+            <label>Nova senha (mínimo 10 caracteres)
+                <input @bind="_nova" type="password" autocomplete="new-password" />
+            </label>
+            @if (_erro is not null)
+            {
+                <p class="aviso erro" role="alert">@_erro</p>
+            }
+            <div class="acoes">
+                <button type="submit">Trocar a senha</button>
+            </div>
+        </form>
+    }
+    else
+    {
+        <Confirmacao Texto="Confirme com a senha atual ou com o rosto. Depois disso você precisa entrar de novo."
+                     RotuloDaSenha="Senha atual"
+                     PermiteRosto="TemRosto"
+                     Ocupado="_ocupado"
+                     Erro="@_erro"
+                     OnConfirmar="TrocarAsync"
+                     OnCancelar="Cancelar" />
+    }
+</section>
+
+@code {
+    private string _nova = "";
+    private bool _confirmando;
+    private bool _ocupado;
+    private string? _erro;
+
+    [Parameter]
+    public bool TemRosto { get; set; }
+
+    private void Continuar()
+    {
+        if (_nova.Length is < 10 or > 128)
+        {
+            _erro = "Use de 10 a 128 caracteres.";
+            return;
+        }
+
+        _erro = null;
+        _confirmando = true;
+    }
+
+    private void Cancelar()
+    {
+        _confirmando = false;
+        _erro = null;
+    }
+
+    private async Task TrocarAsync(Credencial credencial)
+    {
+        _ocupado = true;
+        _erro = null;
+        try
+        {
+            var r = await Api.AcaoSensivelAsync<bool>(HttpMethod.Put, "/v1/me/senha", "TROCAR_SENHA", null, credencial, new TrocarSenhaRequest(_nova));
+            if (r.Ok)
+            {
+                _nova = "";
+                Sessao.Aviso = "Senha trocada. Entre de novo.";
+                await Api.SairAsync();
+                Navegacao.NavigateTo("entrar");
+                return;
+            }
+
+            _erro = r.Erro!.Mensagem;
+        }
+        finally
+        {
+            _ocupado = false;
+        }
+    }
+}

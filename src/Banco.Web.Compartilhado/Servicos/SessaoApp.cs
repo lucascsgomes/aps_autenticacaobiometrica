@@ -20,6 +20,9 @@ public sealed class SessaoApp(ModuloJs modulo)
 
     private DateTimeOffset _venceEm;
 
+    /// <summary>Recado para a próxima tela de entrada (ex.: "Senha trocada, entre de novo"). A tela lê e limpa.</summary>
+    public string? Aviso { get; set; }
+
     public event Action? Mudou;
 
     public async Task DefinirAsync(SessaoResponse sessao)

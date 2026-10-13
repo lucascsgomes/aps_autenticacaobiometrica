@@ -68,7 +68,8 @@ h2 { font-size: 1.1rem; margin: 0 0 12px; }
 
 label { display: block; margin-bottom: 12px; font-size: 0.9rem; color: var(--suave); }
 
-input:not([type="checkbox"]) {
+input:not([type="checkbox"]),
+select {
     display: block;
     width: 100%;
     margin-top: 4px;
@@ -136,3 +137,5 @@ button.link { background: none; color: var(--marca); padding: 0; text-decoration
 .dados dt { color: var(--suave); }
 .dados dd { margin: 0; text-align: right; font-weight: 600; overflow-wrap: anywhere; }
 .dados .codigo { font-family: ui-monospace, monospace; font-size: 0.8rem; font-weight: 400; }
+
+.confirmacao { border-top: 1px solid var(--linha); margin-top: 12px; padding-top: 12px; }

@@ -1,0 +1,38 @@
+@page "/perfil"
+@inherits PaginaProtegida
+
+<h1>Perfil e segurança</h1>
+
+@if (!Autenticado || _status is null || _conta is null)
+{
+    <p class="vazio">@(_erro ?? "Carregando...")</p>
+}
+else
+{
+    <PerfilRosto Status="_status" OnMudou="RecarregarAsync" />
+    <PerfilSenha TemRosto="_status.Cadastrada" />
+    <PerfilLimites TemRosto="_status.Cadastrada" />
+    <PerfilChaves Chaves="_conta.Chaves" TemRosto="_status.Cadastrada" OnMudou="RecarregarAsync" />
+}
+
+@code {
+    private BiometriaResponse? _status;
+    private ContaMeResponse? _conta;
+    private string? _erro;
+
+    protected override Task CarregarAsync() => RecarregarAsync();
+
+    private async Task RecarregarAsync()
+    {
+        var status = await Api.BiometriaAsync();
+        var conta = await Api.ContaAsync();
+        if (status.Ok && conta.Ok)
+        {
+            (_status, _conta) = (status.Valor, conta.Valor);
+        }
+        else
+        {
+            _erro = (status.Erro ?? conta.Erro)!.Mensagem;
+        }
+    }
+}

@@ -7,6 +7,9 @@ namespace Banco.Web.Servicos;
 
 public sealed record ProblemaApi(int Status, string? Code, string Mensagem);
 
+/// <summary>Como a pessoa confirma uma ação sensível: a senha ou uma foto do rosto, nunca as duas.</summary>
+public sealed record Credencial(string? Senha, byte[]? Imagem);
+
 public sealed record Resposta<T>(T? Valor, ProblemaApi? Erro)
 {
     public bool Ok => Erro is null;
@@ -106,6 +109,66 @@ public sealed class ApiBanco(HttpClient http, SessaoApp sessao) : IDisposable
 
     public Task<Resposta<ComprovanteResponse>> ConfirmarComRostoAsync(Guid transferenciaId, Guid desafioId, byte[] imagem) =>
         EnviarAsync<ComprovanteResponse>(() => ComIdempotencia(ComFoto($"/v1/transferencias/{transferenciaId}/confirmar-face", imagem, ("desafio_id", desafioId.ToString()))));
+
+    // ---- perfil ----
+
+    public Task<Resposta<BiometriaResponse>> BiometriaAsync() => EnviarAsync<BiometriaResponse>(() => new HttpRequestMessage(HttpMethod.Get, "/v1/me/biometria"));
+
+    public Task<Resposta<LimitesResponse>> LimitesAsync() => EnviarAsync<LimitesResponse>(() => new HttpRequestMessage(HttpMethod.Get, "/v1/contas/me/limites"));
+
+    /// <summary>Reduzir limite não pede confirmação; aumentar sim (use <see cref="AcaoSensivelAsync{T}"/>).</summary>
+    public Task<Resposta<LimitesResponse>> ReduzirLimitesAsync(LimitesRequest limites) =>
+        EnviarAsync<LimitesResponse>(() => ComJson(HttpMethod.Put, "/v1/contas/me/limites", limites));
+
+    public Task<Resposta<bool>> ExcluirRostoAsync(string senha) =>
+        EnviarAsync<bool>(() => ComJson(HttpMethod.Delete, "/v1/me/biometria", new ConfirmarSenhaRequest(senha)));
+
+    public Task<Resposta<bool>> ApagarChaveAsync(Guid id) =>
+        EnviarAsync<bool>(() => new HttpRequestMessage(HttpMethod.Delete, $"/v1/contas/me/chaves/{id}"));
+
+    /// <summary>
+    /// Ação que exige rosto ou senha: abre o desafio amarrado aos <paramref name="parametros"/> e repete a chamada em multipart
+    /// com a credencial. <paramref name="dados"/> é o corpo da ação (os mesmos campos dos parâmetros).
+    /// </summary>
+    public async Task<Resposta<T>> AcaoSensivelAsync<T>(HttpMethod metodo, string rota, string finalidade, object? parametros, Credencial credencial, object? dados = null, byte[]? novaImagem = null)
+    {
+        var elemento = parametros is null ? (JsonElement?)null : JsonSerializer.SerializeToElement(parametros, Json);
+        var desafio = await EnviarAsync<DesafioDeAcaoResponse>(() => ComJson(HttpMethod.Post, "/v1/biometria/desafios", new DesafioDeAcaoRequest(finalidade, elemento)));
+        if (!desafio.Ok)
+        {
+            return new Resposta<T>(default, desafio.Erro);
+        }
+
+        return await EnviarAsync<T>(() =>
+        {
+            var corpo = new MultipartFormDataContent { { new StringContent(desafio.Valor!.DesafioId.ToString()), "desafio_id" } };
+            if (dados is not null)
+            {
+                corpo.Add(new StringContent(JsonSerializer.Serialize(dados, Json)), "dados");
+            }
+
+            if (credencial.Senha is not null)
+            {
+                corpo.Add(new StringContent(credencial.Senha), "senha");
+            }
+
+            AdicionarFoto(corpo, credencial.Imagem, "image");
+            AdicionarFoto(corpo, novaImagem, "nova_image");
+            return new HttpRequestMessage(metodo, rota) { Content = corpo };
+        });
+    }
+
+    private static void AdicionarFoto(MultipartFormDataContent corpo, byte[]? imagem, string campo)
+    {
+        if (imagem is null)
+        {
+            return;
+        }
+
+        var foto = new ByteArrayContent(imagem);
+        foto.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+        corpo.Add(foto, campo, "rosto.jpg");
+    }
 
     // ---- infraestrutura ----
 
