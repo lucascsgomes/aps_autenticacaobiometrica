@@ -20,4 +20,32 @@ public class FormatoTests
     [InlineData(null, "")]
     public void SoDigitos_descarta_pontuacao(string? entrada, string esperado) =>
         Assert.Equal(esperado, Formato.SoDigitos(entrada));
+
+    [Theory]
+    [InlineData("25", 2500)]
+    [InlineData("25,5", 2550)]
+    [InlineData("25,50", 2550)]
+    [InlineData("25.50", 2550)]
+    [InlineData("0,01", 1)]
+    [InlineData("R$ 1.234,56", 123456)]
+    [InlineData("1.234", 123400)]
+    [InlineData("1.234.567", 123456700)]
+    public void TentarCentavos_aceita_as_formas_comuns_de_digitar(string entrada, long esperado)
+    {
+        Assert.True(Formato.TentarCentavos(entrada, out var centavos));
+        Assert.Equal(esperado, centavos);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(null)]
+    [InlineData("0")]
+    [InlineData("0,00")]
+    [InlineData("-5")]
+    [InlineData("abc")]
+    [InlineData("1,234")]
+    [InlineData("1,2,3")]
+    [InlineData("12345678901")]
+    public void TentarCentavos_recusa_o_que_nao_e_um_valor_positivo_com_duas_casas(string? entrada) =>
+        Assert.False(Formato.TentarCentavos(entrada, out _));
 }

@@ -93,7 +93,29 @@ public sealed class ApiBanco(HttpClient http, SessaoApp sessao) : IDisposable
     public Task<Resposta<ExtratoResponse>> ExtratoAsync(string? cursor) =>
         EnviarAsync<ExtratoResponse>(() => new HttpRequestMessage(HttpMethod.Get, "/v1/contas/me/extrato?limit=10" + (cursor is null ? "" : "&cursor=" + Uri.EscapeDataString(cursor))));
 
+    // ---- transferência ----
+
+    public Task<Resposta<IntencaoResponse>> CriarIntencaoAsync(string chave, long centavos, string? descricao) =>
+        EnviarAsync<IntencaoResponse>(() => ComJson(HttpMethod.Post, "/v1/transferencias/intencoes", new IntencaoRequest(chave, centavos, descricao)));
+
+    public Task<Resposta<ComprovanteResponse>> ConfirmarComSenhaAsync(Guid transferenciaId, string senha) =>
+        EnviarAsync<ComprovanteResponse>(() => ComIdempotencia(ComJson(HttpMethod.Post, $"/v1/transferencias/{transferenciaId}/confirmar", new ConfirmarRequest(senha))));
+
+    public Task<Resposta<DesafioResponse>> DesafioDeTransferenciaAsync(Guid transferenciaId) =>
+        EnviarAsync<DesafioResponse>(() => ComJson(HttpMethod.Post, $"/v1/transferencias/{transferenciaId}/desafio"));
+
+    public Task<Resposta<ComprovanteResponse>> ConfirmarComRostoAsync(Guid transferenciaId, Guid desafioId, byte[] imagem) =>
+        EnviarAsync<ComprovanteResponse>(() => ComIdempotencia(ComFoto($"/v1/transferencias/{transferenciaId}/confirmar-face", imagem, ("desafio_id", desafioId.ToString()))));
+
     // ---- infraestrutura ----
+
+    // Chave nova a cada clique: um retry automático do navegador não move o dinheiro duas vezes.
+    private static HttpRequestMessage ComIdempotencia(HttpRequestMessage requisicao)
+    {
+        requisicao.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
+        return requisicao;
+    }
+
 
     public static HttpRequestMessage ComJson(HttpMethod metodo, string rota, object? corpo = null) =>
         new(metodo, rota) { Content = corpo is null ? null : JsonContent.Create(corpo, corpo.GetType(), null, Json) };

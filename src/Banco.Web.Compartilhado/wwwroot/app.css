@@ -9,6 +9,7 @@
     --erro: #b3261e;
     --erro-fundo: #fdecea;
     --entrada: #1b7a3e;
+    --ok-fundo: #e6f4ea;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -23,6 +24,7 @@
         --erro: #ff8a80;
         --erro-fundo: #3a1d1b;
         --entrada: #5fd38a;
+        --ok-fundo: #16301f;
     }
 }
 
@@ -118,3 +120,19 @@ button.link { background: none; color: var(--marca); padding: 0; text-decoration
 .lista small { display: block; color: var(--suave); }
 .entrada { color: var(--entrada); font-weight: 600; white-space: nowrap; }
 .saida { font-weight: 600; white-space: nowrap; }
+
+.botao {
+    display: inline-block;
+    padding: 10px 16px;
+    border-radius: 8px;
+    background: var(--marca);
+    color: #fff;
+    text-decoration: none;
+}
+
+.aviso.ok { background: var(--ok-fundo); color: var(--entrada); }
+
+.dados { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0 0 16px; }
+.dados dt { color: var(--suave); }
+.dados dd { margin: 0; text-align: right; font-weight: 600; overflow-wrap: anywhere; }
+.dados .codigo { font-family: ui-monospace, monospace; font-size: 0.8rem; font-weight: 400; }
