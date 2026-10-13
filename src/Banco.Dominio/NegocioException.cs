@@ -43,3 +43,13 @@ public sealed class ChaveDeIdempotenciaObrigatoriaException() : NegocioException
 public sealed class ChaveDeIdempotenciaReusadaException() : NegocioException("IDEMPOTENCY_KEY_REUSED", "Esta Idempotency-Key já foi usada em outra operação.");
 
 public sealed class RequisicaoEmAndamentoException() : NegocioException("REQUEST_IN_PROGRESS", "Uma chamada com esta Idempotency-Key ainda está em andamento.");
+
+public sealed class LimiteNoturnoExcedidoException() : NegocioException("NIGHT_LIMIT_EXCEEDED", "Esta transferência passa do limite noturno da conta.");
+
+public sealed class LimiteDiurnoExcedidoException() : NegocioException("DAILY_LIMIT_EXCEEDED", "Esta transferência passa do limite diário da conta.");
+
+/// <summary>Aumentar limite exige rosto ou senha. Sem o desafio implementado, a rota recusa o aumento com este código.</summary>
+public sealed class ConfirmacaoNecessariaException(string finalidade) : NegocioException("STEP_UP_REQUIRED", "Esta alteração exige confirmação por rosto ou senha.")
+{
+    public string Finalidade { get; } = finalidade;
+}

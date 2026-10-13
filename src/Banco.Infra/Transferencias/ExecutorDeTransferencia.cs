@@ -1,3 +1,4 @@
+using Banco.Dominio.Contas;
 using Banco.Dominio.Transferencias;
 using Banco.Infra.Persistencia;
 using Microsoft.EntityFrameworkCore;
@@ -58,6 +59,10 @@ public sealed class ExecutorDeTransferencia(DbContextOptions<BancoDbContext> opc
         {
             transferencia.Falhar(MotivoFalha.SaldoInsuficiente);
         }
+        else if (origem.Tipo == TipoConta.Cliente && await MotivoDeLimiteAsync(banco, origem, agora, valor.Centavos, cancelamento) is { } motivoDoLimite)
+        {
+            transferencia.Falhar(motivoDoLimite);
+        }
         else
         {
             origem.Debitar(valor);
@@ -71,6 +76,14 @@ public sealed class ExecutorDeTransferencia(DbContextOptions<BancoDbContext> opc
         await banco.SaveChangesAsync(cancelamento);
         await transacao.CommitAsync(cancelamento);
         return transferencia.Status;
+    }
+
+    // Roda com a linha da conta de origem travada: duas transferências simultâneas não passam juntas pelo limite.
+    private static async Task<string?> MotivoDeLimiteAsync(BancoDbContext banco, Conta origem, DateTimeOffset agora, long centavos, CancellationToken cancelamento)
+    {
+        var janelas = PoliticaDeLimite.Calcular(origem, agora);
+        var (dia, noite) = await ConsumoDeLimite.SomarAsync(banco, origem.Id, janelas, cancelamento);
+        return PoliticaDeLimite.MotivoDaRecusa(origem, janelas, dia, noite, centavos);
     }
 
     private static bool ConflitoDeConcorrencia(Exception e) =>

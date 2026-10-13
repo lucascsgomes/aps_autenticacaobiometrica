@@ -124,7 +124,10 @@ No Linux e no macOS, troque `.\.venv\Scripts\python.exe` por `.venv/bin/python` 
 | `POST /v1/transferencias/{id}/confirmar` | Confirma com a senha e exige `Idempotency-Key`. Retry com a mesma chave devolve a resposta original sem mover dinheiro de novo; a mesma chave em outra transferência dá `422` |
 | `GET /v1/transferencias/{id}` | Estado e histórico, para a tela de "status incerto" quando a resposta do confirmar se perde |
 | `GET /v1/transferencias/{id}/comprovante` | Comprovante com E2E ID e código de autenticação simulado, para quem enviou e para quem recebeu (que vê a origem mascarada e o próprio saldo) |
+| `GET /v1/contas/me/limites` | Limites diurno e noturno, quanto já foi usado na janela atual e se ela é `DIURNA` ou `NOTURNA` |
+| `PUT /v1/contas/me/limites` | Reduzir vale na hora. Aumentar um limite ou encurtar o período noturno responde `403 STEP_UP_REQUIRED` (`finalidade=ALTERAR_LIMITE`) até a confirmação por rosto ou senha existir |
 
+- **Limites**: padrão de R$ 5.000 por dia e R$ 1.000 à noite (20h às 6h, ou 22h às 6h), no fuso `America/Sao_Paulo`. O diurno soma o dia civil inteiro e o noturno soma só a janela da noite. A intenção faz uma checagem de cortesia, e a que vale roda dentro da transação do dinheiro, com a conta de origem travada: transferências simultâneas não passam juntas pelo limite (provado em teste: 5 de R$ 300 contra R$ 1.000 concluem exatamente 3). Estourar vira `422 NIGHT_LIMIT_EXCEEDED` ou `DAILY_LIMIT_EXCEEDED`.
 - **Confirmação por senha**: senha errada gasta a intenção (`FALHA`) e conta para o bloqueio da conta. Senha certa de conta bloqueada recebe `403 ACCOUNT_LOCKED` e não move nada. A confirmação trava a linha da transferência, então confirmações simultâneas movem o dinheiro uma vez só (provado em teste).
 - **JWT** HS256 de 15 minutos, validado com emissor, audiência, expiração e algoritmo fixo (`alg=none` e assinatura adulterada são recusados em teste).
 - **Refresh token** opaco de 32 bytes; no banco fica só o SHA-256, e cada login abre uma família rotativa de 7 dias.
@@ -139,7 +142,7 @@ A cada push e pull request, o GitHub Actions faz o build da solution (aviso vira
 
 ## Status
 
-Em construção, por ondas. Pronto até aqui: repositório e esteira de CI, solution .NET com primeira regra de domínio testada, API no ar com health checks, o autenticador facial transformado em microserviço HTTP com enroll e verify, o PostgreSQL com usuários, contas, transferências e ledger de partida dobrada (regras como constraints e triggers, provadas sob concorrência), e a API com cadastro, login por senha, JWT, refresh rotativo, extrato por cursor, chaves de transferência, rate limit e transferência confirmada por senha com idempotência. Próximo: limites diurno e noturno, depois o reconhecimento facial.
+Em construção, por ondas. Pronto até aqui: repositório e esteira de CI, solution .NET com primeira regra de domínio testada, API no ar com health checks, o autenticador facial transformado em microserviço HTTP com enroll e verify, o PostgreSQL com usuários, contas, transferências e ledger de partida dobrada (regras como constraints e triggers, provadas sob concorrência), e a API com cadastro, login por senha, JWT, refresh rotativo, extrato por cursor, chaves de transferência, rate limit e transferência confirmada por senha com idempotência. Próximo: o reconhecimento facial (cadastro, login e confirmação).
 
 ## Limitações
 

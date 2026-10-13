@@ -7,6 +7,7 @@ using Banco.Dominio;
 using Banco.Dominio.Chaves;
 using Banco.Dominio.Transferencias;
 using Banco.Infra.Persistencia;
+using Banco.Infra.Transferencias;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
 
@@ -23,6 +24,8 @@ internal static class ContaEndpoints
         var contas = rotas.MapGroup("/v1/contas").RequireAuthorization().RequireRateLimiting(Limites.Leitura);
         contas.MapGet("/me", ContaDoUsuario);
         contas.MapGet("/me/extrato", Extrato);
+        contas.MapGet("/me/limites", ObterLimites);
+        contas.MapPut("/me/limites", AlterarLimites);
         contas.MapDelete("/me/chaves/{id:guid}", ApagarChave);
 
         rotas.MapGet("/v1/chaves/{valor}", ConsultarChave).RequireAuthorization().RequireRateLimiting(Limites.ConsultaChave);
@@ -166,6 +169,67 @@ internal static class ContaEndpoints
         var proximo = haMais ? EscreverCursor(pagina[^1].L.CriadoEm, pagina[^1].L.Id) : null;
         return Results.Ok(new ExtratoResponse(itens, proximo, haMais));
     }
+
+    private static async Task<IResult> ObterLimites(ClaimsPrincipal usuario, ServicoDeLimites limites, CancellationToken cancelamento) =>
+        UsuarioDoToken(usuario) is { } id ? Results.Ok(Montar(await limites.ObterAsync(id, cancelamento))) : Results.Unauthorized();
+
+    private static async Task<IResult> AlterarLimites(LimitesRequest? corpo, ClaimsPrincipal usuario, ServicoDeLimites limites, CancellationToken cancelamento)
+    {
+        if (UsuarioDoToken(usuario) is not { } id)
+        {
+            return Results.Unauthorized();
+        }
+
+        var erros = new Dictionary<string, string[]>();
+        TimeOnly? inicio = null;
+        if (corpo is null || (corpo.LimiteDiurnoCentavos is null && corpo.LimiteNoturnoCentavos is null && corpo.InicioNoturno is null))
+        {
+            erros["corpo"] = ["Envie ao menos um dos limites."];
+        }
+        else
+        {
+            if (corpo.LimiteDiurnoCentavos is < 0 || corpo.LimiteNoturnoCentavos is < 0)
+            {
+                erros["limite"] = ["Os limites não podem ser negativos."];
+            }
+
+            if (corpo.InicioNoturno is not null)
+            {
+                inicio = corpo.InicioNoturno switch
+                {
+                    "20:00" => new TimeOnly(20, 0),
+                    "22:00" => new TimeOnly(22, 0),
+                    _ => null,
+                };
+                if (inicio is null)
+                {
+                    erros["inicio_noturno"] = ["Use 20:00 ou 22:00."];
+                }
+            }
+        }
+
+        if (erros.Count > 0)
+        {
+            return Validacao.Problema(erros);
+        }
+
+        try
+        {
+            return Results.Ok(Montar(await limites.AlterarAsync(id, corpo!.LimiteDiurnoCentavos, corpo.LimiteNoturnoCentavos, inicio, cancelamento)));
+        }
+        catch (ArgumentException)
+        {
+            return Validacao.Problema(new Dictionary<string, string[]> { ["limite_noturno_centavos"] = ["O limite noturno não pode passar do diurno."] });
+        }
+    }
+
+    private static LimitesResponse Montar(LimitesDaConta l) => new(
+        l.DiurnoCentavos,
+        l.NoturnoCentavos,
+        l.InicioNoturno.ToString("HH':'mm", CultureInfo.InvariantCulture),
+        l.FimNoturno.ToString("HH':'mm", CultureInfo.InvariantCulture),
+        l.UsadoNaJanelaAtualCentavos,
+        l.JanelaNoturna ? "NOTURNA" : "DIURNA");
 
     private static async Task<IResult> ConsultarChave(string valor, ClaimsPrincipal usuario, BancoDbContext banco, CancellationToken cancelamento)
     {

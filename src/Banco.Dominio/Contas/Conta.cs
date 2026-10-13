@@ -53,6 +53,28 @@ public sealed class Conta
     public static Conta AbrirDoSistema(string numero, DateTimeOffset agora) =>
         Nova(TipoConta.Sistema, null, numero, agora);
 
+    /// <summary>Reduzir vale na hora. Aumentar exige confirmação por rosto ou senha, então quem chama checa <see cref="ExigeConfirmacao"/> antes.</summary>
+    public void DefinirLimites(long diurnoCentavos, long noturnoCentavos, TimeOnly inicioNoturno)
+    {
+        if (diurnoCentavos < 0 || noturnoCentavos < 0 || noturnoCentavos > diurnoCentavos)
+        {
+            throw new ArgumentException("Limites devem ser positivos e o noturno não pode passar do diurno.");
+        }
+
+        if (inicioNoturno != new TimeOnly(20, 0) && inicioNoturno != new TimeOnly(22, 0))
+        {
+            throw new ArgumentException("O período noturno começa às 20h ou às 22h.", nameof(inicioNoturno));
+        }
+
+        LimiteDiurnoCentavos = diurnoCentavos;
+        LimiteNoturnoCentavos = noturnoCentavos;
+        InicioNoturno = inicioNoturno;
+    }
+
+    /// <summary>Verdadeiro se a mudança deixa a conta mais exposta: algum limite sobe ou o período noturno (mais restrito) encurta.</summary>
+    public bool ExigeConfirmacao(long diurnoCentavos, long noturnoCentavos, TimeOnly inicioNoturno) =>
+        diurnoCentavos > LimiteDiurnoCentavos || noturnoCentavos > LimiteNoturnoCentavos || inicioNoturno > InicioNoturno;
+
     /// <summary>Só a conta de sistema pode ficar negativa: é a contrapartida do dinheiro fictício.</summary>
     public bool PodeDebitar(Dinheiro valor) => Tipo == TipoConta.Sistema || SaldoCentavos >= valor.Centavos;
 

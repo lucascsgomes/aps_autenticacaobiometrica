@@ -83,6 +83,23 @@ public sealed class ServicoDeTransferencia(BancoDbContext banco, ExecutorDeTrans
         }
 
         var agora = relogio.GetUtcNow();
+        if (origem.Conta.Tipo == TipoConta.Cliente)
+        {
+            // Checagem de cortesia, sem lock: a que vale é a do executor.
+            var janelas = PoliticaDeLimite.Calcular(origem.Conta, agora);
+            var (dia, noite) = await ConsumoDeLimite.SomarAsync(banco, origem.Conta.Id, janelas, cancelamento);
+            var motivo = PoliticaDeLimite.MotivoDaRecusa(origem.Conta, janelas, dia, noite, valorCentavos);
+            if (motivo == MotivoFalha.LimiteNoturno)
+            {
+                throw new LimiteNoturnoExcedidoException();
+            }
+
+            if (motivo == MotivoFalha.LimiteDiurno)
+            {
+                throw new LimiteDiurnoExcedidoException();
+            }
+        }
+
         foreach (var antiga in await banco.Transferencias
             .Where(t => t.ContaOrigemId == origem.Conta.Id && t.Status == StatusTransferencia.PendenteBiometria)
             .ToListAsync(cancelamento))

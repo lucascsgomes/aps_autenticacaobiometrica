@@ -33,6 +33,8 @@ public static class MotivoFalha
     public const string DestinoIndisponivel = "DESTINO_INDISPONIVEL";
     public const string BiometriaRecusada = "BIOMETRIA_RECUSADA";
     public const string SenhaRecusada = "SENHA_RECUSADA";
+    public const string LimiteNoturno = "LIMITE_NOTURNO";
+    public const string LimiteDiurno = "LIMITE_DIURNO";
 }
 
 /// <summary>Transferência com máquina de estados. O banco impõe as mesmas transições por trigger.</summary>

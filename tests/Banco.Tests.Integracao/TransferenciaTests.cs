@@ -223,13 +223,4 @@ public class TransferenciaTests(ApiFactory fabrica) : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.Unauthorized, (await _cliente.Enviar(HttpMethod.Post, "/v1/transferencias/intencoes", null, new { })).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await _cliente.Enviar(HttpMethod.Get, $"/v1/transferencias/{Guid.NewGuid()}", null)).StatusCode);
     }
-
-    private sealed class RelogioAjustavel : TimeProvider
-    {
-        private TimeSpan _deslocamento;
-
-        public void Avancar(TimeSpan quanto) => _deslocamento += quanto;
-
-        public override DateTimeOffset GetUtcNow() => System.GetUtcNow() + _deslocamento;
-    }
 }

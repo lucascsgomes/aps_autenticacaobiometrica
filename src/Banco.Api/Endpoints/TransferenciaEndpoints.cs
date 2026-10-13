@@ -180,6 +180,8 @@ internal static class TransferenciaEndpoints
         MotivoFalha.SenhaRecusada => new SenhaNaoVerificadaException(),
         MotivoFalha.SaldoInsuficiente => new SaldoInsuficienteException(),
         MotivoFalha.DestinoIndisponivel => new DestinoIndisponivelException(),
+        MotivoFalha.LimiteNoturno => new LimiteNoturnoExcedidoException(),
+        MotivoFalha.LimiteDiurno => new LimiteDiurnoExcedidoException(),
         _ => throw new InvalidOperationException($"Motivo de falha inesperado na confirmação: {motivo}"),
     };
 

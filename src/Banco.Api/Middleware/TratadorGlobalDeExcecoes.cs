@@ -40,9 +40,11 @@ internal sealed partial class TratadorGlobalDeExcecoes(
             ConflitoDeCadastroException => (StatusCodes.Status409Conflict, "Cadastro não concluído"),
             CredenciaisInvalidasException => (StatusCodes.Status401Unauthorized, "Credenciais inválidas"),
             ContaBloqueadaException => (StatusCodes.Status403Forbidden, "Conta bloqueada"),
+            ConfirmacaoNecessariaException => (StatusCodes.Status403Forbidden, "Confirme com o rosto ou a senha"),
             NaoAutenticadoException => (StatusCodes.Status401Unauthorized, "Não autenticado"),
             TransferenciaNaoEncontradaException => (StatusCodes.Status404NotFound, "Transferência não encontrada"),
             MesmaContaException or DestinoIndisponivelException or SaldoInsuficienteException or ChaveDeIdempotenciaReusadaException
+                or LimiteNoturnoExcedidoException or LimiteDiurnoExcedidoException
                 => (StatusCodes.Status422UnprocessableEntity, "Transferência recusada"),
             SenhaNaoVerificadaException => (StatusCodes.Status401Unauthorized, "Senha não confere"),
             TransferenciaNaoPendenteException or TransferenciaExpiradaException or RequisicaoEmAndamentoException
@@ -55,6 +57,11 @@ internal sealed partial class TratadorGlobalDeExcecoes(
 
         var problema = new ProblemDetails { Status = status, Title = titulo, Detail = negocio.Message, Type = $"https://httpstatuses.com/{status}" };
         problema.Extensions["code"] = negocio.Code;
+        if (negocio is ConfirmacaoNecessariaException confirmacao)
+        {
+            problema.Extensions["finalidade"] = confirmacao.Finalidade;
+        }
+
         return problema;
     }
 

@@ -30,6 +30,7 @@ public static class DependencyInjection
         servicos.AddScoped<ServicoDeAutenticacao>();
         servicos.AddScoped<ServicoDeCadastro>();
         servicos.AddScoped<ServicoDeTransferencia>();
+        servicos.AddScoped<ServicoDeLimites>();
         servicos.AddScoped<ServicoDeIdempotencia>();
 
         return servicos;
