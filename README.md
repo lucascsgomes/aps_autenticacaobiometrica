@@ -73,7 +73,7 @@ Sem a connection string a API sobe, mas `/ready` responde 503 (`/health` continu
 
 **Testando a API sem o reconhecimento facial**
 
-O cadastro de produção termina com a foto do rosto. Enquanto essa parte não existe, ligue o atalho de desenvolvimento (só vale em `Development`, é ignorado em qualquer outro ambiente):
+O cadastro de produção termina com a foto do rosto (próxima seção). Para testar o resto sem câmera, ligue o atalho de desenvolvimento (só vale em `Development`, é ignorado em qualquer outro ambiente):
 
 ```powershell
 dotnet user-secrets set "Auth:CadastroSemRosto" "true" --project src/Banco.Api
@@ -86,6 +86,20 @@ Invoke-RestMethod http://localhost:5080/v1/auth/register -Method Post -Body $cor
 ```
 
 Sem `Jwt:Chave` configurada, em `Development` a API sorteia uma chave a cada início (os tokens morrem ao reiniciar). Fora de `Development` a chave é obrigatória e a API não sobe sem ela.
+
+**Cadastro com o rosto de verdade**
+
+Com o atalho desligado, `POST /v1/auth/register` cria o usuário pendente e devolve um `cadastro_token` de 5 minutos; a foto vai em `POST /v1/auth/face/enroll` (multipart, campo `image`, até 2 MB) e é isso que ativa a conta, com o crédito inicial. Para a API falar com o microserviço, guarde a URL, a chave de serviço e a chave que cifra o vetor facial:
+
+```powershell
+$chave = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+dotnet user-secrets set "Auth:CadastroSemRosto" "false" --project src/Banco.Api
+dotnet user-secrets set "Face:BaseUrl" "http://127.0.0.1:7860" --project src/Banco.Api
+dotnet user-secrets set "Face:ChaveInterna" "<a mesma FACE_INTERNAL_KEY do microserviço>" --project src/Banco.Api
+dotnet user-secrets set "Biometria:ChaveCifra" $chave --project src/Banco.Api   # perdeu a chave, perdeu os templates: guarde fora do banco
+```
+
+Sem `Face:BaseUrl` o rosto responde `503 FACE_SERVICE_UNAVAILABLE` (nunca é aceito sem verificação). Com `Face:BaseUrl` e sem `Biometria:ChaveCifra`, a API recusa subir.
 
 **Microserviço facial (Python)** (os modelos YuNet e SFace são baixados uma vez, veja o [README do serviço](face-service/README.md))
 
@@ -113,6 +127,7 @@ No Linux e no macOS, troque `.\.venv\Scripts\python.exe` por `.venv/bin/python` 
 | Rota | O que faz |
 |---|---|
 | `POST /v1/auth/register` | Cria usuário (`CADASTRO_PENDENTE`) e conta, e registra o consentimento da biometria (LGPD). A conta só ativa quando o rosto for cadastrado |
+| `POST /v1/auth/face/enroll` | Recebe a foto com o `cadastro_token`, pede o vetor ao microserviço, cifra e guarda, ativa a conta, lança o crédito inicial e abre a sessão. Foto sem rosto ou com vários rostos (`422`) não gasta o cadastro: dá para tentar de novo até o token vencer |
 | `POST /v1/auth/login/senha` | Entrada por CPF e senha. Resposta idêntica para CPF inexistente, senha errada e cadastro pendente; 5 falhas bloqueiam por 1, 2, 4, 8 e até 15 minutos, e o bloqueio só aparece a quem acerta a senha |
 | `POST /v1/auth/refresh` | Troca o refresh token por um novo. Usar um token já usado revoga a família inteira |
 | `POST /v1/auth/logout` | Revoga a família do refresh token |
@@ -129,6 +144,8 @@ No Linux e no macOS, troque `.\.venv\Scripts\python.exe` por `.venv/bin/python` 
 
 - **Limites**: padrão de R$ 5.000 por dia e R$ 1.000 à noite (20h às 6h, ou 22h às 6h), no fuso `America/Sao_Paulo`. O diurno soma o dia civil inteiro e o noturno soma só a janela da noite. A intenção faz uma checagem de cortesia, e a que vale roda dentro da transação do dinheiro, com a conta de origem travada: transferências simultâneas não passam juntas pelo limite (provado em teste: 5 de R$ 300 contra R$ 1.000 concluem exatamente 3). Estourar vira `422 NIGHT_LIMIT_EXCEEDED` ou `DAILY_LIMIT_EXCEEDED`.
 - **Confirmação por senha**: senha errada gasta a intenção (`FALHA`) e conta para o bloqueio da conta. Senha certa de conta bloqueada recebe `403 ACCOUNT_LOCKED` e não move nada. A confirmação trava a linha da transferência, então confirmações simultâneas movem o dinheiro uma vez só (provado em teste).
+- **Rosto no cadastro**: a foto nunca é guardada (fica só em memória, e a API força o buffer do formulário acima de 2 MB para o ASP.NET não gravar em disco). O vetor de 128 floats é cifrado com AES-256-GCM, com o id do usuário como dado associado (template copiado para outra linha não decifra), a chave vem de fora do banco e a versão dela fica gravada. Um usuário tem no máximo um template, garantido por índice único. O token de cadastro tem escopo próprio: não abre nenhuma rota de conta, e um token de sessão não serve para enviar o rosto.
+- **Falha fechada**: o cliente do microserviço tem timeout de 5 s por tentativa, 10 s no total, uma repetição e circuit breaker. Chave interna errada, modelos fora, 5xx ou resposta que a API não entende viram `503 FACE_SERVICE_UNAVAILABLE` com `Retry-After`.
 - **JWT** HS256 de 15 minutos, validado com emissor, audiência, expiração e algoritmo fixo (`alg=none` e assinatura adulterada são recusados em teste).
 - **Refresh token** opaco de 32 bytes; no banco fica só o SHA-256, e cada login abre uma família rotativa de 7 dias.
 - **Senha** com `PasswordHasher` do ASP.NET Identity, e comparação sempre executada para igualar o tempo de resposta.
@@ -142,7 +159,7 @@ A cada push e pull request, o GitHub Actions faz o build da solution (aviso vira
 
 ## Status
 
-Em construção, por ondas. Pronto até aqui: repositório e esteira de CI, solution .NET com primeira regra de domínio testada, API no ar com health checks, o autenticador facial transformado em microserviço HTTP com enroll e verify, o PostgreSQL com usuários, contas, transferências e ledger de partida dobrada (regras como constraints e triggers, provadas sob concorrência), e a API com cadastro, login por senha, JWT, refresh rotativo, extrato por cursor, chaves de transferência, rate limit e transferência confirmada por senha com idempotência. Próximo: o reconhecimento facial (cadastro, login e confirmação).
+Em construção, por ondas. Pronto até aqui: repositório e esteira de CI, solution .NET com primeira regra de domínio testada, API no ar com health checks, o autenticador facial transformado em microserviço HTTP com enroll e verify, o PostgreSQL com usuários, contas, transferências e ledger de partida dobrada (regras como constraints e triggers, provadas sob concorrência), e a API com cadastro, login por senha, JWT, refresh rotativo, extrato por cursor, chaves de transferência, rate limit, transferência confirmada por senha com idempotência, limites diurno e noturno e o rosto no cadastro. Próximo: entrar e confirmar a transferência com o rosto.
 
 ## Limitações
 

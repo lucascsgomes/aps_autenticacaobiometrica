@@ -31,7 +31,13 @@ public sealed record SessaoResponse(
     string? Metodo);
 
 /// <summary>Sessão só vem preenchida quando o cadastro já foi concluído (modo de desenvolvimento sem rosto).</summary>
-public sealed record RegistrarResponse(Guid UsuarioId, ContaResumoDto Conta, string? ProximoPasso, SessaoResponse? Sessao);
+public sealed record RegistrarResponse(
+    Guid UsuarioId,
+    ContaResumoDto Conta,
+    string? ProximoPasso,
+    SessaoResponse? Sessao,
+    string? CadastroToken = null,
+    DateTimeOffset? ExpiraEm = null);
 
 public sealed record TitularDto(string Nome);
 

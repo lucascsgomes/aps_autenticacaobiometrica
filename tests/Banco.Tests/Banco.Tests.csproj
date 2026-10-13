@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Banco.Dominio\Banco.Dominio.csproj" />
+    <ProjectReference Include="..\..\src\Banco.Infra\Banco.Infra.csproj" />
   </ItemGroup>
 
 </Project>

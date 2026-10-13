@@ -1,3 +1,4 @@
+using Banco.Infra.Facial;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -12,6 +13,9 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
 
     // Sempre sobrescreve a conexão: sem isso os user-secrets de quem roda os testes apontariam para o Neon.
     private readonly string _conexao = ServidorPostgres.CriarBancoAsync().GetAwaiter().GetResult();
+
+    /// <summary>O face-service de mentira usado por esta fábrica. O teste manda a falha que quiser.</summary>
+    public ClienteFacialFalso Facial { get; } = new();
 
     public string? ConexaoForcada { get; init; }
 
@@ -28,8 +32,13 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("ConnectionStrings:Banco", ConexaoForcada ?? _conexao);
         builder.UseSetting("RateLimit:Fator", FatorDeLimite.ToString(System.Globalization.CultureInfo.InvariantCulture));
         builder.UseSetting("Jwt:Chave", ChaveJwt);
+        builder.UseSetting("Biometria:ChaveCifra", Convert.ToBase64String(new byte[32].Select((_, i) => (byte)(i + 1)).ToArray()));
         builder.UseSetting("Auth:CadastroSemRosto", CadastroSemRosto ? "true" : "false");
-        builder.ConfigureServices(s => s.AddTransient<IStartupFilter, FiltroDeRotaQueFalha>());
+        builder.ConfigureServices(s =>
+        {
+            s.AddTransient<IStartupFilter, FiltroDeRotaQueFalha>();
+            s.AddSingleton<IClienteFacial>(Facial);
+        });
     }
 
     private sealed class FiltroDeRotaQueFalha : IStartupFilter

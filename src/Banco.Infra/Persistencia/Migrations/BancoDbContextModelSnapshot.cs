@@ -22,6 +22,57 @@ namespace Banco.Infra.Persistencia.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Banco.Dominio.Biometria.TemplateFacial", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<short>("ChaveVersao")
+                        .HasColumnType("smallint")
+                        .HasColumnName("chave_versao");
+
+                    b.Property<DateTimeOffset>("CriadoEm")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("criado_em");
+
+                    b.Property<byte[]>("EmbeddingCifrado")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("embedding_cifrado");
+
+                    b.Property<string>("Modelo")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("modelo");
+
+                    b.Property<byte[]>("Nonce")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("nonce");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("usuario_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_templates_faciais");
+
+                    b.HasIndex("UsuarioId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_template_usuario");
+
+                    b.ToTable("templates_faciais", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_template_chave_versao", "chave_versao > 0");
+
+                            t.HasCheckConstraint("ck_template_nonce", "octet_length(nonce) = 12");
+
+                            t.HasCheckConstraint("ck_template_tamanho", "octet_length(embedding_cifrado) = 528");
+                        });
+                });
+
             modelBuilder.Entity("Banco.Dominio.Chaves.ChaveTransferencia", b =>
                 {
                     b.Property<Guid>("Id")
@@ -525,6 +576,16 @@ namespace Banco.Infra.Persistencia.Migrations
 
                             t.HasCheckConstraint("ck_idem_resposta", "(estado = 'CONCLUIDA') = (status_code IS NOT NULL)");
                         });
+                });
+
+            modelBuilder.Entity("Banco.Dominio.Biometria.TemplateFacial", b =>
+                {
+                    b.HasOne("Banco.Dominio.Usuarios.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_templates_faciais_usuarios_usuario_id");
                 });
 
             modelBuilder.Entity("Banco.Dominio.Chaves.ChaveTransferencia", b =>

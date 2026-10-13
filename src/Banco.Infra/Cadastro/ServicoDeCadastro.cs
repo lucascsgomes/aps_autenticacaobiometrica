@@ -4,7 +4,9 @@ using Banco.Dominio.Chaves;
 using Banco.Dominio.Contas;
 using Banco.Dominio.Transferencias;
 using Banco.Dominio.Usuarios;
+using Banco.Dominio.Biometria;
 using Banco.Infra.Autenticacao;
+using Banco.Infra.Facial;
 using Banco.Infra.Persistencia;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -15,7 +17,7 @@ public sealed record NovoCadastro(string Nome, string Cpf, string Email, string?
 
 public sealed record CadastroCriado(Guid UsuarioId, string Nome, Guid ContaId, string Agencia, string Numero, StatusUsuario Status, string? RefreshToken);
 
-public sealed class ServicoDeCadastro(BancoDbContext banco, ServicoDeSenha senhas, RefreshTokenServico refresh, TimeProvider relogio)
+public sealed class ServicoDeCadastro(BancoDbContext banco, ServicoDeSenha senhas, RefreshTokenServico refresh, CifraDeTemplate cifra, TimeProvider relogio)
 {
     public static readonly Dinheiro CreditoInicial = Dinheiro.DeReais(5_000);
 
@@ -46,6 +48,36 @@ public sealed class ServicoDeCadastro(BancoDbContext banco, ServicoDeSenha senha
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Guarda o rosto cifrado e conclui o cadastro: ativa o usuário, concede o crédito inicial pelo ledger e abre a sessão, tudo numa transação.
+    /// A linha do usuário é travada, então duas fotos simultâneas do mesmo cadastro não concluem duas vezes.
+    /// </summary>
+    public async Task<SessaoEmitida> ConcluirComRostoAsync(Guid usuarioId, byte[] embedding, CancellationToken cancelamento = default)
+    {
+        var agora = relogio.GetUtcNow();
+        banco.ChangeTracker.Clear();
+        await using var transacao = await banco.Database.BeginTransactionAsync(cancelamento);
+
+        var usuario = await banco.Usuarios
+            .FromSql($"SELECT * FROM usuarios WHERE id = {usuarioId} FOR UPDATE")
+            .SingleOrDefaultAsync(cancelamento);
+        if (usuario is not { Status: StatusUsuario.CadastroPendente })
+        {
+            throw new TokenDeCadastroEncerradoException();
+        }
+
+        var conta = await banco.Contas.SingleAsync(c => c.UsuarioId == usuarioId, cancelamento);
+        var (cifrado, nonce) = cifra.Cifrar(usuarioId, embedding);
+        banco.Templates.Add(TemplateFacial.Criar(usuarioId, cifrado, nonce, cifra.Versao, agora));
+        usuario.ConcluirCadastro(agora);
+        await ConcederCreditoInicialAsync(usuario, conta, agora, cancelamento);
+        var refreshToken = refresh.NovaFamilia(usuarioId);
+
+        await banco.SaveChangesAsync(cancelamento);
+        await transacao.CommitAsync(cancelamento);
+        return new SessaoEmitida(usuarioId, usuario.Nome, conta.Id, refreshToken);
     }
 
     private async Task<CadastroCriado> TentarAsync(NovoCadastro dados, string senhaHash, bool concluirSemRosto, CancellationToken cancelamento)

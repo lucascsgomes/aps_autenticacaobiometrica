@@ -18,6 +18,17 @@ internal sealed partial class TratadorGlobalDeExcecoes(
             contexto.Response.Headers.RetryAfter = Math.Ceiling(bloqueada.TentarEm.TotalSeconds).ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
 
+        if (excecao is ServicoFacialIndisponivelException)
+        {
+            contexto.Response.Headers.RetryAfter = "15";
+        }
+
+        // O Kestrel recusa corpo acima do limite da rota: vira o mesmo erro de imagem grande, não um 500.
+        if (excecao is BadHttpRequestException { StatusCode: StatusCodes.Status413PayloadTooLarge })
+        {
+            excecao = new ImagemGrandeException();
+        }
+
         var problema = excecao is NegocioException negocio
             ? MontarProblema(negocio)
             : ProblemaInterno(excecao, contexto);
@@ -50,6 +61,11 @@ internal sealed partial class TratadorGlobalDeExcecoes(
             TransferenciaNaoPendenteException or TransferenciaExpiradaException or RequisicaoEmAndamentoException
                 => (StatusCodes.Status409Conflict, "Transferência não pode ser confirmada"),
             ChaveDeIdempotenciaObrigatoriaException => (StatusCodes.Status400BadRequest, "Idempotency-Key obrigatória"),
+            RostoNaoDetectadoException or VariosRostosException => (StatusCodes.Status422UnprocessableEntity, "Rosto não reconhecido na foto"),
+            ImagemInvalidaException => (StatusCodes.Status400BadRequest, "Imagem inválida"),
+            ImagemGrandeException => (StatusCodes.Status413PayloadTooLarge, "Imagem grande demais"),
+            ServicoFacialIndisponivelException => (StatusCodes.Status503ServiceUnavailable, "Reconhecimento facial indisponível"),
+            TokenDeCadastroEncerradoException => (StatusCodes.Status401Unauthorized, "Cadastro encerrado"),
             ChaveNaoEncontradaException => (StatusCodes.Status404NotFound, "Chave não encontrada"),
             ChaveInvalidaException => (StatusCodes.Status422UnprocessableEntity, "Chave inválida"),
             _ => (StatusCodes.Status400BadRequest, "Requisição inválida"),

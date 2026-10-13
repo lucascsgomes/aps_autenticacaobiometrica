@@ -53,3 +53,16 @@ public sealed class ConfirmacaoNecessariaException(string finalidade) : NegocioE
 {
     public string Finalidade { get; } = finalidade;
 }
+
+public sealed class RostoNaoDetectadoException() : NegocioException("NO_FACE_DETECTED", "Não encontramos um rosto na foto. Enquadre o rosto e tente de novo.");
+
+public sealed class VariosRostosException() : NegocioException("MULTIPLE_FACES", "Há mais de um rosto na foto. Fique sozinho no enquadramento.");
+
+public sealed class ImagemInvalidaException() : NegocioException("INVALID_IMAGE", "Não foi possível ler a imagem enviada.");
+
+public sealed class ImagemGrandeException() : NegocioException("IMAGE_TOO_LARGE", "A imagem passa de 2 MB.");
+
+/// <summary>Falha fechada: sem o serviço facial o rosto nunca é aceito. A senha continua valendo onde a rota permite.</summary>
+public sealed class ServicoFacialIndisponivelException() : NegocioException("FACE_SERVICE_UNAVAILABLE", "O reconhecimento facial está indisponível agora. Tente de novo em instantes.");
+
+public sealed class TokenDeCadastroEncerradoException() : NegocioException("FACE_TOKEN_EXPIRED", "Este cadastro não está mais aguardando o rosto.");
