@@ -1,0 +1,36 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject SessaoApp Sessao
+@inject ApiBanco Api
+@inject NavigationManager Navegacao
+
+<header class="topo">
+    <a class="marca" href="">Banco APS</a>
+    @if (Sessao.Ativa)
+    {
+        <nav>
+            <NavLink href="" Match="NavLinkMatch.All">Início</NavLink>
+            <button type="button" class="link" @onclick="SairAsync">Sair</button>
+        </nav>
+    }
+</header>
+
+<main>
+    @Body
+</main>
+
+<footer class="rodape">Projeto acadêmico. O dinheiro é fictício.</footer>
+
+@code {
+    protected override void OnInitialized() => Sessao.Mudou += Atualizar;
+
+    private void Atualizar() => _ = InvokeAsync(StateHasChanged);
+
+    private async Task SairAsync()
+    {
+        await Api.SairAsync();
+        Navegacao.NavigateTo("entrar");
+    }
+
+    public void Dispose() => Sessao.Mudou -= Atualizar;
+}

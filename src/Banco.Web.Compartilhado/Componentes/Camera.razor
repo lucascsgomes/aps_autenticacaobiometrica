@@ -1,0 +1,61 @@
+@implements IAsyncDisposable
+@inject ModuloJs Modulo
+
+<div class="camera">
+    <video @ref="_video" autoplay muted playsinline></video>
+    @if (_erro is not null)
+    {
+        <p class="aviso erro" role="alert">@_erro</p>
+    }
+</div>
+
+@code {
+    private ElementReference _video;
+    private string? _erro;
+    private bool _ligada;
+
+    /// <summary>Dispara quando a câmera abriu e já dá para capturar.</summary>
+    [Parameter]
+    public EventCallback OnPronta { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool primeira)
+    {
+        if (!primeira)
+        {
+            return;
+        }
+
+        try
+        {
+            await (await Modulo.ObterAsync()).InvokeVoidAsync("iniciarCamera", _video);
+            _ligada = true;
+            await OnPronta.InvokeAsync();
+        }
+        catch (JSException)
+        {
+            _erro = "Não consegui abrir a câmera. Permita o acesso no navegador e recarregue a página.";
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>JPEG do quadro atual, ou nulo se a câmera não está pronta.</summary>
+    public async Task<byte[]?> CapturarAsync() =>
+        _ligada ? await (await Modulo.ObterAsync()).InvokeAsync<byte[]?>("capturar", _video) : null;
+
+    public async ValueTask DisposeAsync()
+    {
+        if (!_ligada)
+        {
+            return;
+        }
+
+        try
+        {
+            await (await Modulo.ObterAsync()).InvokeVoidAsync("pararCamera", _video);
+        }
+        catch (JSDisconnectedException)
+        {
+            // a página já foi fechada: a câmera para sozinha
+        }
+    }
+}

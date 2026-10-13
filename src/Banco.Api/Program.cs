@@ -30,6 +30,10 @@ builder.Services.AddAuthorization(o =>
 });
 builder.Services.Configure<FormOptions>(o => o.MemoryBufferThreshold = 3 * 1024 * 1024); // a foto nunca vai para disco
 
+// Só as origens listadas em Cors:Origens (a interface web) chamam a API do navegador; sem lista, nenhuma.
+var origens = builder.Configuration.GetSection("Cors:Origens").Get<string[]>() ?? [];
+builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.WithOrigins(origens).AllowAnyHeader().AllowAnyMethod().WithExposedHeaders("Retry-After")));
+
 builder.Services.AdicionarLimites(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<TratadorGlobalDeExcecoes>();
@@ -41,6 +45,7 @@ var app = builder.Build();
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();
+app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();

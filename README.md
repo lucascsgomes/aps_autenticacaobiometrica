@@ -41,10 +41,12 @@ A API é a única que fala com o banco e com o `face-service`. Os detalhes de ar
 | `src/Banco.Infra` | EF Core + PostgreSQL (mapeamento, migrations, `ExecutorDeTransferencia`); depois, o cliente do face-service |
 | `src/Banco.Contratos` | DTOs compartilhados entre API e clientes (JSON em `snake_case`) |
 | `src/Banco.Api` | API ASP.NET Core: cadastro, login, refresh, conta, health checks e erros em Problem Details |
+| `src/Banco.Web.Compartilhado` | Razor Class Library com as páginas, o cliente da API e a câmera; é o que o app de celular vai reaproveitar |
+| `src/Banco.Web` | casca Blazor WebAssembly que hospeda a biblioteca acima |
 | `tests/` | testes unitários e de integração (a API sobe inteira em memória, com PostgreSQL real embutido) |
 | `face-service/` | microserviço de reconhecimento facial em Python (FastAPI + OpenCV) |
 
-Os projetos de front (Blazor Web e MAUI) entram nas próximas ondas.
+O app de celular (MAUI) entra numa onda posterior.
 
 ## Como rodar
 
@@ -58,6 +60,16 @@ dotnet run --project src/Banco.Api         # abre http://localhost:5080/ready
 ```
 
 Os testes de integração sobem um **PostgreSQL 17 embutido** (baixado na primeira execução), então não precisam de Docker nem de conta na nuvem.
+
+**Interface web (Blazor WebAssembly)**
+
+Com a API e o microserviço facial no ar (acima), suba a interface em outro terminal e abra http://localhost:5090:
+
+```powershell
+dotnet run --project src/Banco.Web          # http://localhost:5090
+```
+
+O endereço da API fica em `src/Banco.Web/wwwroot/appsettings.json` (`ApiBaseUrl`, padrão `http://localhost:5080`) e a API só aceita chamadas das origens listadas em `Cors:Origens` (padrão `http://localhost:5090`). A câmera só abre em `localhost` ou HTTPS, e o navegador pede permissão na primeira vez. Hoje há cadastro com a foto do rosto (e retomada do cadastro que parou na foto), entrada com senha ou com o rosto, saldo, chaves e extrato.
 
 **Banco de dados (PostgreSQL na nuvem, ex.: Neon)**
 
@@ -174,7 +186,7 @@ A cada push e pull request, o GitHub Actions faz o build da solution (aviso vira
 
 ## Status
 
-Em construção, por ondas. Pronto até aqui: repositório e esteira de CI, solution .NET com primeira regra de domínio testada, API no ar com health checks, o autenticador facial transformado em microserviço HTTP com enroll e verify, o PostgreSQL com usuários, contas, transferências e ledger de partida dobrada (regras como constraints e triggers, provadas sob concorrência), e a API com cadastro, login por senha, JWT, refresh rotativo, extrato por cursor, chaves de transferência, rate limit, transferência confirmada por senha com idempotência, limites diurno e noturno, o rosto no cadastro, a retomada do cadastro, o login por rosto e a confirmação da transferência com o rosto. a confirmação por rosto ou senha para aumentar limite e criar chave. Também prontos: a troca de senha e a troca ou exclusão do rosto. Próximo: a interface web, para demonstrar cadastro, login e transferência com o rosto. Favorecidos ficam para depois.
+Em construção, por ondas. Pronto até aqui: repositório e esteira de CI, solution .NET com primeira regra de domínio testada, API no ar com health checks, o autenticador facial transformado em microserviço HTTP com enroll e verify, o PostgreSQL com usuários, contas, transferências e ledger de partida dobrada (regras como constraints e triggers, provadas sob concorrência), e a API com cadastro, login por senha, JWT, refresh rotativo, extrato por cursor, chaves de transferência, rate limit, transferência confirmada por senha com idempotência, limites diurno e noturno, o rosto no cadastro, a retomada do cadastro, o login por rosto e a confirmação da transferência com o rosto. a confirmação por rosto ou senha para aumentar limite e criar chave. Também prontos: a troca de senha e a troca ou exclusão do rosto. A interface web já cadastra com a foto, entra com senha ou rosto e mostra saldo e extrato. Próximo: transferir com o rosto e a tela do perfil (rosto, senha, limites, chaves). Favorecidos ficam para depois.
 
 ## Limitações
 

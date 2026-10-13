@@ -1,0 +1,149 @@
+@page "/entrar"
+@inject ApiBanco Api
+@inject NavigationManager Navegacao
+
+<section class="cartao estreito">
+    <h1>Entrar</h1>
+
+    @if (_desafio is null)
+    {
+        <form @onsubmit="EntrarComSenhaAsync" @onsubmit:preventDefault>
+            <label>CPF
+                <input @bind="_cpf" @bind:event="oninput" inputmode="numeric" autocomplete="username" maxlength="14" placeholder="Só os números" />
+            </label>
+            <label>Senha
+                <input @bind="_senha" type="password" autocomplete="current-password" />
+            </label>
+            @if (_erro is not null)
+            {
+                <p class="aviso erro" role="alert">@_erro</p>
+            }
+            <div class="acoes">
+                <button type="submit" disabled="@_ocupado">Entrar com a senha</button>
+                <button type="button" class="secundario" disabled="@_ocupado" @onclick="AbrirRostoAsync">Entrar com o rosto</button>
+            </div>
+        </form>
+        <p class="rodape-cartao">Ainda não tem conta? <a href="cadastro">Cadastre-se</a></p>
+    }
+    else
+    {
+        <p>Olhe para a câmera, com o rosto inteiro no quadro e boa luz, e toque em entrar.</p>
+        <Camera @ref="_camera" OnPronta="() => _cameraPronta = true" />
+        @if (_erro is not null)
+        {
+            <p class="aviso erro" role="alert">@_erro</p>
+        }
+        <div class="acoes">
+            <button type="button" disabled="@(_ocupado || !_cameraPronta)" @onclick="EntrarComRostoAsync">@(_ocupado ? "Verificando..." : "Entrar")</button>
+            <button type="button" class="secundario" disabled="@_ocupado" @onclick="Voltar">Voltar</button>
+        </div>
+    }
+</section>
+
+@code {
+    // Foto sem rosto, com vários ou serviço fora do ar devolvem o desafio: dá para tirar outra foto sem recomeçar.
+    private static readonly string[] ErrosQueMantemODesafio = ["NO_FACE_DETECTED", "MULTIPLE_FACES", "FACE_SERVICE_UNAVAILABLE", "INVALID_IMAGE", "IMAGE_TOO_LARGE"];
+
+    private string _cpf = "";
+    private string _senha = "";
+    private string? _erro;
+    private bool _ocupado;
+    private bool _cameraPronta;
+    private Guid? _desafio;
+    private Camera? _camera;
+
+    private async Task EntrarComSenhaAsync()
+    {
+        if (!CpfPreenchido())
+        {
+            return;
+        }
+
+        await ExecutarAsync(async () =>
+        {
+            var r = await Api.LoginComSenhaAsync(Formato.SoDigitos(_cpf), _senha);
+            if (r.Ok)
+            {
+                Navegacao.NavigateTo("");
+            }
+            else
+            {
+                _erro = r.Erro!.Mensagem;
+            }
+        });
+    }
+
+    private async Task AbrirRostoAsync()
+    {
+        if (!CpfPreenchido())
+        {
+            return;
+        }
+
+        await ExecutarAsync(async () =>
+        {
+            var r = await Api.DesafioDeLoginAsync(Formato.SoDigitos(_cpf));
+            if (r.Ok)
+            {
+                _desafio = r.Valor!.DesafioId;
+                _cameraPronta = false;
+            }
+            else
+            {
+                _erro = r.Erro!.Mensagem;
+            }
+        });
+    }
+
+    private async Task EntrarComRostoAsync()
+    {
+        await ExecutarAsync(async () =>
+        {
+            var foto = await _camera!.CapturarAsync();
+            if (foto is null)
+            {
+                _erro = "A câmera ainda não está pronta.";
+                return;
+            }
+
+            var r = await Api.LoginComRostoAsync(_desafio!.Value, foto);
+            if (r.Ok)
+            {
+                Navegacao.NavigateTo("");
+                return;
+            }
+
+            _erro = r.Erro!.Mensagem;
+            if (r.Erro.Code is null || !ErrosQueMantemODesafio.Contains(r.Erro.Code))
+            {
+                _desafio = null;
+            }
+        });
+    }
+
+    private void Voltar()
+    {
+        _desafio = null;
+        _erro = null;
+    }
+
+    private bool CpfPreenchido()
+    {
+        _erro = Formato.SoDigitos(_cpf).Length == 11 ? null : "Informe os 11 números do CPF.";
+        return _erro is null;
+    }
+
+    private async Task ExecutarAsync(Func<Task> acao)
+    {
+        _ocupado = true;
+        _erro = null;
+        try
+        {
+            await acao();
+        }
+        finally
+        {
+            _ocupado = false;
+        }
+    }
+}

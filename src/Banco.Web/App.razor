@@ -1,0 +1,6 @@
+<Router AppAssembly="typeof(App).Assembly" AdditionalAssemblies="new[] { typeof(Banco.Web.Servicos.SessaoApp).Assembly }" NotFoundPage="typeof(Banco.Web.Paginas.NaoEncontrada)">
+    <Found Context="rota">
+        <RouteView RouteData="rota" DefaultLayout="typeof(Banco.Web.Layout.LayoutPrincipal)" />
+        <FocusOnNavigate RouteData="rota" Selector="h1" />
+    </Found>
+</Router>

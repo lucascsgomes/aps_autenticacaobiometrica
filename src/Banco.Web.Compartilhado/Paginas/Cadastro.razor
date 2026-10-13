@@ -1,0 +1,186 @@
+@page "/cadastro"
+@inject ApiBanco Api
+@inject SessaoApp Sessao
+@inject NavigationManager Navegacao
+
+<section class="cartao estreito">
+    <h1>Abrir conta</h1>
+
+    @if (_cadastroToken is null)
+    {
+        @if (!_retomando)
+        {
+            <form @onsubmit="EnviarDadosAsync" @onsubmit:preventDefault>
+                <label>Nome completo
+                    <input @bind="_nome" autocomplete="name" maxlength="120" />
+                </label>
+                <label>CPF
+                    <input @bind="_cpf" inputmode="numeric" maxlength="14" placeholder="Só os números" />
+                </label>
+                <label>E-mail
+                    <input @bind="_email" type="email" autocomplete="email" />
+                </label>
+                <label>Celular (opcional)
+                    <input @bind="_celular" inputmode="tel" placeholder="+5511999999999" />
+                </label>
+                <label>Senha (mínimo 10 caracteres)
+                    <input @bind="_senha" type="password" autocomplete="new-password" />
+                </label>
+                <label class="marcar">
+                    <input type="checkbox" @bind="_aceito" />
+                    <span>Autorizo o uso do meu rosto para entrar na conta e confirmar transferências. A foto não é guardada, só uma representação numérica cifrada, que posso apagar quando quiser (LGPD, art. 11).</span>
+                </label>
+                @if (_erro is not null)
+                {
+                    <p class="aviso erro" role="alert">@_erro</p>
+                }
+                <div class="acoes">
+                    <button type="submit" disabled="@_ocupado">Continuar para a foto</button>
+                </div>
+            </form>
+            <p class="rodape-cartao">
+                Já tem conta? <a href="entrar">Entrar</a>.
+                Parou na foto? <button type="button" class="link" @onclick="() => _retomando = true">Retomar o cadastro</button>
+            </p>
+        }
+        else
+        {
+            <p>Informe o CPF e a senha do cadastro que ficou pela metade.</p>
+            <form @onsubmit="RetomarAsync" @onsubmit:preventDefault>
+                <label>CPF
+                    <input @bind="_cpf" inputmode="numeric" maxlength="14" />
+                </label>
+                <label>Senha
+                    <input @bind="_senha" type="password" autocomplete="current-password" />
+                </label>
+                @if (_erro is not null)
+                {
+                    <p class="aviso erro" role="alert">@_erro</p>
+                }
+                <div class="acoes">
+                    <button type="submit" disabled="@_ocupado">Retomar</button>
+                    <button type="button" class="secundario" @onclick="() => _retomando = false">Voltar</button>
+                </div>
+            </form>
+        }
+    }
+    else
+    {
+        <p>Último passo: tire uma foto do rosto, de frente, sozinho no quadro e com boa luz. Ela vira a sua chave de acesso.</p>
+        <Camera @ref="_camera" OnPronta="() => _cameraPronta = true" />
+        @if (_erro is not null)
+        {
+            <p class="aviso erro" role="alert">@_erro</p>
+        }
+        <div class="acoes">
+            <button type="button" disabled="@(_ocupado || !_cameraPronta)" @onclick="TirarFotoAsync">@(_ocupado ? "Cadastrando..." : "Tirar a foto e concluir")</button>
+        </div>
+    }
+</section>
+
+@code {
+    private const string VersaoDoTermo = "2026-10-v1";
+
+    private string _nome = "";
+    private string _cpf = "";
+    private string _email = "";
+    private string _celular = "";
+    private string _senha = "";
+    private bool _aceito;
+    private bool _retomando;
+    private string? _erro;
+    private bool _ocupado;
+    private bool _cameraPronta;
+    private string? _cadastroToken;
+    private Camera? _camera;
+
+    private async Task EnviarDadosAsync()
+    {
+        if (!_aceito)
+        {
+            _erro = "Para usar o rosto é preciso autorizar o uso da biometria.";
+            return;
+        }
+
+        await ExecutarAsync(async () =>
+        {
+            var dados = new RegistrarRequest(
+                _nome.Trim(),
+                Formato.SoDigitos(_cpf),
+                _email.Trim(),
+                string.IsNullOrWhiteSpace(_celular) ? null : _celular.Trim(),
+                _senha,
+                new ConsentimentoBiometricoDto(true, VersaoDoTermo));
+            var r = await Api.RegistrarAsync(dados);
+            if (!r.Ok)
+            {
+                _erro = r.Erro!.Mensagem;
+            }
+            else if (r.Valor!.Sessao is { } sessao)
+            {
+                // Modo de desenvolvimento sem rosto: a conta já nasce ativa.
+                await Sessao.DefinirAsync(sessao);
+                Navegacao.NavigateTo("");
+            }
+            else
+            {
+                _cadastroToken = r.Valor.CadastroToken;
+                _cameraPronta = false;
+            }
+        });
+    }
+
+    private async Task RetomarAsync() =>
+        await ExecutarAsync(async () =>
+        {
+            var r = await Api.RetomarAsync(Formato.SoDigitos(_cpf), _senha);
+            if (r.Ok)
+            {
+                _cadastroToken = r.Valor!.CadastroToken;
+                _cameraPronta = false;
+            }
+            else
+            {
+                _erro = r.Erro!.Mensagem;
+            }
+        });
+
+    private async Task TirarFotoAsync() =>
+        await ExecutarAsync(async () =>
+        {
+            var foto = await _camera!.CapturarAsync();
+            if (foto is null)
+            {
+                _erro = "A câmera ainda não está pronta.";
+                return;
+            }
+
+            var r = await Api.CadastrarRostoAsync(_cadastroToken!, foto);
+            if (r.Ok)
+            {
+                Navegacao.NavigateTo("");
+                return;
+            }
+
+            _erro = r.Erro!.Mensagem;
+            if (r.Erro.Code == "FACE_TOKEN_EXPIRED")
+            {
+                _cadastroToken = null;
+                _retomando = true;
+            }
+        });
+
+    private async Task ExecutarAsync(Func<Task> acao)
+    {
+        _ocupado = true;
+        _erro = null;
+        try
+        {
+            await acao();
+        }
+        finally
+        {
+            _ocupado = false;
+        }
+    }
+}
