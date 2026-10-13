@@ -71,6 +71,30 @@ public sealed class DesafioBiometrico
     public static byte[] HashDaTransferencia(Guid usuarioId, Transferencia t) =>
         SHA256.HashData(Encoding.UTF8.GetBytes($"TRANSFERENCIA|{usuarioId}|{t.Id}|{t.ContaOrigemId}|{t.ContaDestinoId}|{t.ValorCentavos}"));
 
+    /// <summary>
+    /// Amarra o desafio a uma ação sensível: dono, finalidade, parâmetros em JSON canônico (chaves em ordem) e o nonce do próprio desafio.
+    /// Rosto ou senha aprovados valem para aquele limite ou aquela chave e para mais nada.
+    /// </summary>
+    public static byte[] HashDaAcao(Guid usuarioId, FinalidadeDoDesafio finalidade, string parametrosCanonicos, byte[] nonce) =>
+        SHA256.HashData(Encoding.UTF8.GetBytes($"{usuarioId}|{Codigo.De(finalidade)}|{parametrosCanonicos}|{Convert.ToHexString(nonce)}"));
+
+    public static DesafioBiometrico AbrirDeAcao(Guid usuarioId, FinalidadeDoDesafio finalidade, string parametrosCanonicos, decimal limiar, IPAddress? ip, DateTimeOffset agora)
+    {
+        var nonce = RandomNumberGenerator.GetBytes(32);
+        return new()
+        {
+            Id = Guid.NewGuid(),
+            UsuarioId = usuarioId,
+            Finalidade = finalidade,
+            Nonce = nonce,
+            HashOperacao = HashDaAcao(usuarioId, finalidade, parametrosCanonicos, nonce),
+            LimiarAplicado = limiar,
+            CriadoEm = agora,
+            ExpiraEm = agora + Validade,
+            Ip = ip,
+        };
+    }
+
     public static DesafioBiometrico AbrirDeTransferencia(Guid usuarioId, Transferencia t, decimal limiar, IPAddress? ip, DateTimeOffset agora) => new()
     {
         Id = Guid.NewGuid(),

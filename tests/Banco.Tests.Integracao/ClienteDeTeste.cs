@@ -109,4 +109,12 @@ internal static class ClienteDeTeste
         Assert.Equal(System.Net.HttpStatusCode.Created, resposta.StatusCode);
         return (cpf, cadastro.UsuarioId, await resposta.Ler<SessaoResponse>());
     }
+
+    /// <summary>Titular ativo com rosto cadastrado (o face-service é o falso da fábrica sem atalho), com a conta carregada.</summary>
+    public static async Task<Titular> NovoTitularComRostoAsync(this HttpClient cliente)
+    {
+        var (cpf, _, sessao) = await cliente.CadastrarComRostoAsync();
+        var conta = await (await cliente.Enviar(HttpMethod.Get, "/v1/contas/me", sessao)).Ler<ContaMeResponse>();
+        return new Titular(cpf, sessao, conta);
+    }
 }

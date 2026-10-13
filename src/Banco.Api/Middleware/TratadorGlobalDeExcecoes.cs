@@ -69,6 +69,8 @@ internal sealed partial class TratadorGlobalDeExcecoes(
             TokenDeCadastroEncerradoException => (StatusCodes.Status401Unauthorized, "Cadastro encerrado"),
             ChaveNaoEncontradaException => (StatusCodes.Status404NotFound, "Chave não encontrada"),
             ChaveInvalidaException => (StatusCodes.Status422UnprocessableEntity, "Chave inválida"),
+            ChaveJaExisteException => (StatusCodes.Status409Conflict, "Chave já existe"),
+            LimiteDeChavesException => (StatusCodes.Status422UnprocessableEntity, "Limite de chaves"),
             _ => (StatusCodes.Status400BadRequest, "Requisição inválida"),
         };
 

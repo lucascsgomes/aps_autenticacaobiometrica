@@ -21,15 +21,15 @@ public sealed class ServicoDeLimites(BancoDbContext banco, TimeProvider relogio)
         return await MontarAsync(conta, cancelamento);
     }
 
-    /// <summary>Reduzir vale na hora. Qualquer aumento (ou encurtar o período noturno) exige confirmação, ainda não disponível: responde 403 STEP_UP_REQUIRED.</summary>
-    public async Task<LimitesDaConta> AlterarAsync(Guid usuarioId, long? diurnoCentavos, long? noturnoCentavos, TimeOnly? inicioNoturno, CancellationToken cancelamento = default)
+    /// <summary>Reduzir vale na hora. Qualquer aumento (ou encurtar o período noturno) exige confirmação: sem <paramref name="confirmado"/> responde 403 STEP_UP_REQUIRED.</summary>
+    public async Task<LimitesDaConta> AlterarAsync(Guid usuarioId, long? diurnoCentavos, long? noturnoCentavos, TimeOnly? inicioNoturno, bool confirmado = false, CancellationToken cancelamento = default)
     {
         var conta = await banco.Contas.SingleAsync(c => c.UsuarioId == usuarioId, cancelamento);
         var diurno = diurnoCentavos ?? conta.LimiteDiurnoCentavos;
         var noturno = noturnoCentavos ?? conta.LimiteNoturnoCentavos;
         var inicio = inicioNoturno ?? conta.InicioNoturno;
 
-        if (conta.ExigeConfirmacao(diurno, noturno, inicio))
+        if (!confirmado && conta.ExigeConfirmacao(diurno, noturno, inicio))
         {
             throw new ConfirmacaoNecessariaException("ALTERAR_LIMITE");
         }

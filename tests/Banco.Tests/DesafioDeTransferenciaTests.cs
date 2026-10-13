@@ -38,4 +38,18 @@ public class DesafioDeTransferenciaTests
         Assert.Equal(DesafioBiometrico.HashDaTransferencia(usuario, t), d.HashOperacao);
         Assert.Equal(Agora + DesafioBiometrico.Validade, d.ExpiraEm);
     }
+
+    [Fact]
+    public void Hash_da_acao_muda_com_o_dono_a_finalidade_os_parametros_e_o_nonce()
+    {
+        var usuario = Guid.NewGuid();
+        var nonce = new byte[32];
+        var basico = DesafioBiometrico.HashDaAcao(usuario, FinalidadeDoDesafio.AlterarLimite, """{"limite_diurno_centavos":450000}""", nonce);
+
+        Assert.Equal(basico, DesafioBiometrico.HashDaAcao(usuario, FinalidadeDoDesafio.AlterarLimite, """{"limite_diurno_centavos":450000}""", nonce));
+        Assert.NotEqual(basico, DesafioBiometrico.HashDaAcao(Guid.NewGuid(), FinalidadeDoDesafio.AlterarLimite, """{"limite_diurno_centavos":450000}""", nonce));
+        Assert.NotEqual(basico, DesafioBiometrico.HashDaAcao(usuario, FinalidadeDoDesafio.NovaChave, """{"limite_diurno_centavos":450000}""", nonce));
+        Assert.NotEqual(basico, DesafioBiometrico.HashDaAcao(usuario, FinalidadeDoDesafio.AlterarLimite, """{"limite_diurno_centavos":500000}""", nonce));
+        Assert.NotEqual(basico, DesafioBiometrico.HashDaAcao(usuario, FinalidadeDoDesafio.AlterarLimite, """{"limite_diurno_centavos":450000}""", new byte[32].Select(_ => (byte)1).ToArray()));
+    }
 }

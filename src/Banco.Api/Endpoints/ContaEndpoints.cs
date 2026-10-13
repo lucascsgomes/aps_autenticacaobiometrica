@@ -4,11 +4,16 @@ using System.Text;
 using Banco.Api.Seguranca;
 using Banco.Contratos;
 using Banco.Dominio;
+using Banco.Dominio.Biometria;
 using Banco.Dominio.Chaves;
 using Banco.Dominio.Transferencias;
+using Banco.Infra.Autenticacao;
 using Banco.Infra.Persistencia;
 using Banco.Infra.Transferencias;
+using Microsoft.AspNetCore.Http.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using RequestSizeLimitAttribute = Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute;
 using Microsoft.IdentityModel.JsonWebTokens;
 
 namespace Banco.Api.Endpoints;
@@ -25,7 +30,8 @@ internal static class ContaEndpoints
         contas.MapGet("/me", ContaDoUsuario);
         contas.MapGet("/me/extrato", Extrato);
         contas.MapGet("/me/limites", ObterLimites);
-        contas.MapPut("/me/limites", AlterarLimites);
+        contas.MapPut("/me/limites", AlterarLimites).WithMetadata(new RequestSizeLimitAttribute(Imagens.TamanhoMaximoDaRequisicao));
+        contas.MapPost("/me/chaves", CriarChave).WithMetadata(new RequestSizeLimitAttribute(Imagens.TamanhoMaximoDaRequisicao));
         contas.MapDelete("/me/chaves/{id:guid}", ApagarChave);
 
         rotas.MapGet("/v1/chaves/{valor}", ConsultarChave).RequireAuthorization().RequireRateLimiting(Limites.ConsultaChave);
@@ -173,39 +179,30 @@ internal static class ContaEndpoints
     private static async Task<IResult> ObterLimites(ClaimsPrincipal usuario, ServicoDeLimites limites, CancellationToken cancelamento) =>
         UsuarioDoToken(usuario) is { } id ? Results.Ok(Montar(await limites.ObterAsync(id, cancelamento))) : Results.Unauthorized();
 
-    private static async Task<IResult> AlterarLimites(LimitesRequest? corpo, ClaimsPrincipal usuario, ServicoDeLimites limites, CancellationToken cancelamento)
+    // JSON reduz na hora e recusa aumento com 403 STEP_UP_REQUIRED. Multipart (dados, desafio_id, image ou senha) é a forma de aumentar.
+    private static async Task<IResult> AlterarLimites(
+        HttpContext http,
+        ClaimsPrincipal usuario,
+        ServicoDeLimites limites,
+        ServicoDeStepUp stepUp,
+        IOptions<JsonOptions> json,
+        CancellationToken cancelamento)
     {
         if (UsuarioDoToken(usuario) is not { } id)
         {
             return Results.Unauthorized();
         }
 
-        var erros = new Dictionary<string, string[]>();
-        TimeOnly? inicio = null;
-        if (corpo is null || (corpo.LimiteDiurnoCentavos is null && corpo.LimiteNoturnoCentavos is null && corpo.InicioNoturno is null))
-        {
-            erros["corpo"] = ["Envie ao menos um dos limites."];
-        }
-        else
-        {
-            if (corpo.LimiteDiurnoCentavos is < 0 || corpo.LimiteNoturnoCentavos is < 0)
-            {
-                erros["limite"] = ["Os limites não podem ser negativos."];
-            }
+        var opcoes = json.Value.SerializerOptions;
+        var (confirmacao, errosDaConfirmacao) = await StepUpEndpoints.LerConfirmacaoAsync(http.Request, cancelamento);
+        var corpo = confirmacao is not null
+            ? StepUpEndpoints.Ler<LimitesRequest>(confirmacao.Dados, opcoes)
+            : http.Request.HasJsonContentType() ? await LerJsonAsync<LimitesRequest>(http.Request, opcoes, cancelamento) : null;
 
-            if (corpo.InicioNoturno is not null)
-            {
-                inicio = corpo.InicioNoturno switch
-                {
-                    "20:00" => new TimeOnly(20, 0),
-                    "22:00" => new TimeOnly(22, 0),
-                    _ => null,
-                };
-                if (inicio is null)
-                {
-                    erros["inicio_noturno"] = ["Use 20:00 ou 22:00."];
-                }
-            }
+        var erros = AcoesSensiveis.ErrosDeLimites(corpo, out var inicio);
+        foreach (var (campo, mensagens) in errosDaConfirmacao)
+        {
+            erros[campo] = mensagens;
         }
 
         if (erros.Count > 0)
@@ -213,14 +210,69 @@ internal static class ContaEndpoints
             return Validacao.Problema(erros);
         }
 
+        if (confirmacao is not null)
+        {
+            await stepUp.ConfirmarAsync(id, FinalidadeDoDesafio.AlterarLimite, AcoesSensiveis.Canonico(corpo), confirmacao.DesafioId, confirmacao.Senha, confirmacao.Imagem, http.TraceIdentifier, cancelamento);
+        }
+
         try
         {
-            return Results.Ok(Montar(await limites.AlterarAsync(id, corpo!.LimiteDiurnoCentavos, corpo.LimiteNoturnoCentavos, inicio, cancelamento)));
+            return Results.Ok(Montar(await limites.AlterarAsync(id, corpo!.LimiteDiurnoCentavos, corpo.LimiteNoturnoCentavos, inicio, confirmacao is not null, cancelamento)));
         }
         catch (ArgumentException)
         {
             return Validacao.Problema(new Dictionary<string, string[]> { ["limite_noturno_centavos"] = ["O limite noturno não pode passar do diurno."] });
         }
+    }
+
+    private static async Task<T?> LerJsonAsync<T>(HttpRequest requisicao, System.Text.Json.JsonSerializerOptions opcoes, CancellationToken cancelamento) where T : class
+    {
+        try
+        {
+            return await requisicao.ReadFromJsonAsync<T>(opcoes, cancelamento);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+
+    // Sempre exige confirmação: sem desafio_id (ou fora de multipart) responde 403 STEP_UP_REQUIRED com finalidade NOVA_CHAVE.
+    private static async Task<IResult> CriarChave(
+        HttpContext http,
+        ClaimsPrincipal usuario,
+        ServicoDeChaves chaves,
+        ServicoDeStepUp stepUp,
+        IOptions<JsonOptions> json,
+        CancellationToken cancelamento)
+    {
+        if (UsuarioDoToken(usuario) is not { } id)
+        {
+            return Results.Unauthorized();
+        }
+
+        var (confirmacao, erros) = await StepUpEndpoints.LerConfirmacaoAsync(http.Request, cancelamento);
+        if (confirmacao is null)
+        {
+            throw new ConfirmacaoNecessariaException("NOVA_CHAVE");
+        }
+
+        var corpo = StepUpEndpoints.Ler<NovaChaveRequest>(confirmacao.Dados, json.Value.SerializerOptions);
+        var errosDaChave = AcoesSensiveis.ErrosDeChave(corpo, out var tipo);
+        foreach (var (campo, mensagens) in errosDaChave)
+        {
+            erros[campo] = mensagens;
+        }
+
+        if (erros.Count > 0)
+        {
+            return Validacao.Problema(erros);
+        }
+
+        var contaId = await chaves.PrepararAsync(id, tipo, corpo!.Valor, cancelamento);
+        await stepUp.ConfirmarAsync(id, FinalidadeDoDesafio.NovaChave, AcoesSensiveis.Canonico(corpo), confirmacao.DesafioId, confirmacao.Senha, confirmacao.Imagem, http.TraceIdentifier, cancelamento);
+        var chave = await chaves.CriarAsync(contaId, tipo, corpo.Valor, cancelamento);
+        return Results.Json(new ChaveCriadaResponse(chave.Id, Codigo.De(chave.Tipo), chave.Valor, chave.CriadaEm), statusCode: StatusCodes.Status201Created);
     }
 
     private static LimitesResponse Montar(LimitesDaConta l) => new(

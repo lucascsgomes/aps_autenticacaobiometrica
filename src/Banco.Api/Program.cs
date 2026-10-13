@@ -47,6 +47,7 @@ app.UseRateLimiter();
 app.MapearSaude();
 app.MapearAuth();
 app.MapearContas();
+app.MapearStepUp();
 app.MapearTransferencias();
 
 app.Run();

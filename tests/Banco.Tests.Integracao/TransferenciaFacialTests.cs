@@ -25,12 +25,7 @@ public class TransferenciaFacialTests : IClassFixture<FaceEnrollTests.SemAtalho>
 
     private static string NovaChave() => Guid.NewGuid().ToString();
 
-    private async Task<Titular> ComRostoAsync()
-    {
-        var (cpf, _, sessao) = await _cliente.CadastrarComRostoAsync();
-        var conta = await (await _cliente.Enviar(HttpMethod.Get, "/v1/contas/me", sessao)).Ler<ContaMeResponse>();
-        return new Titular(cpf, sessao, conta);
-    }
+    private Task<Titular> ComRostoAsync() => _cliente.NovoTitularComRostoAsync();
 
     private static async Task<string?> Code(HttpResponseMessage resposta)
     {

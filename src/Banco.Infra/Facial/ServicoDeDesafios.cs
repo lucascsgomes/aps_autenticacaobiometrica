@@ -13,8 +13,8 @@ namespace Banco.Infra.Facial;
 /// <summary>Um desafio recém-consumido. <c>UsadoEm</c> é o carimbo gravado, que a devolução usa para só desfazer o próprio consumo.</summary>
 public sealed record DesafioConsumido(Guid? UsuarioId, decimal Limiar, DateTime UsadoEm);
 
-/// <summary>O que o desafio de uma operação precisa carregar para ser consumido: de quem, de qual transferência e o hash dela.</summary>
-public sealed record Amarra(Guid UsuarioId, Guid TransferenciaId, byte[] Hash);
+/// <summary>O que o desafio de uma operação precisa carregar para ser consumido: de quem, da transferência (quando é uma) e o hash da operação.</summary>
+public sealed record Amarra(Guid UsuarioId, Guid? TransferenciaId, byte[] Hash);
 
 /// <summary>Abre, consome e devolve desafios. Consumir é um UPDATE atômico: dois usos simultâneos do mesmo desafio nunca passam os dois.</summary>
 public sealed class ServicoDeDesafios(BancoDbContext banco, TimeProvider relogio)
@@ -26,6 +26,18 @@ public sealed class ServicoDeDesafios(BancoDbContext banco, TimeProvider relogio
         await banco.SaveChangesAsync(cancelamento);
         return desafio;
     }
+
+    public async Task<DesafioBiometrico> AbrirDeAcaoAsync(Guid usuarioId, FinalidadeDoDesafio finalidade, string parametrosCanonicos, decimal limiar, IPAddress? ip, CancellationToken cancelamento = default)
+    {
+        var desafio = DesafioBiometrico.AbrirDeAcao(usuarioId, finalidade, parametrosCanonicos, limiar, ip, relogio.GetUtcNow());
+        banco.Add(desafio);
+        await banco.SaveChangesAsync(cancelamento);
+        return desafio;
+    }
+
+    /// <summary>O nonce entra no hash da ação, então quem consome precisa dele para recalcular. Só do dono: de outro usuário é nulo.</summary>
+    public Task<byte[]?> NonceAsync(Guid desafioId, Guid usuarioId, CancellationToken cancelamento = default) =>
+        banco.Desafios.AsNoTracking().Where(d => d.Id == desafioId && d.UsuarioId == usuarioId).Select(d => (byte[]?)d.Nonce).SingleOrDefaultAsync(cancelamento);
 
     /// <summary>
     /// Um desafio por transferência (índice único): se ainda não foi usado, devolve o mesmo (sem zerar as devoluções já gastas,
@@ -73,7 +85,7 @@ public sealed class ServicoDeDesafios(BancoDbContext banco, TimeProvider relogio
             UPDATE desafios_biometricos
                SET usado_em = @agora, metodo = @metodo
              WHERE id = @id AND finalidade = @finalidade AND usado_em IS NULL AND expira_em > @agora
-            """ + (amarra is null ? "" : " AND usuario_id = @usuario AND transferencia_id = @transferencia AND hash_operacao = @hash") + """
+            """ + (amarra is null ? "" : " AND usuario_id = @usuario AND hash_operacao = @hash" + (amarra.TransferenciaId is null ? "" : " AND transferencia_id = @transferencia")) + """
 
             RETURNING usuario_id, limiar_aplicado, usado_em
             """,
@@ -86,8 +98,11 @@ public sealed class ServicoDeDesafios(BancoDbContext banco, TimeProvider relogio
                 if (amarra is not null)
                 {
                     cmd.Parameters.AddWithValue("usuario", amarra.UsuarioId);
-                    cmd.Parameters.AddWithValue("transferencia", amarra.TransferenciaId);
                     cmd.Parameters.AddWithValue("hash", amarra.Hash);
+                    if (amarra.TransferenciaId is { } transferenciaId)
+                    {
+                        cmd.Parameters.AddWithValue("transferencia", transferenciaId);
+                    }
                 }
             },
             cancelamento);

@@ -32,7 +32,7 @@ public sealed class DestinoIndisponivelException() : NegocioException("DESTINATI
 
 public sealed class SaldoInsuficienteException() : NegocioException("INSUFFICIENT_FUNDS", "Saldo insuficiente para esta transferência.");
 
-public sealed class SenhaNaoVerificadaException() : NegocioException("PASSWORD_NOT_VERIFIED", "Senha não confere. A transferência foi cancelada.");
+public sealed class SenhaNaoVerificadaException() : NegocioException("PASSWORD_NOT_VERIFIED", "Senha não confere.");
 
 public sealed class TransferenciaNaoPendenteException() : NegocioException("TRANSFER_NOT_PENDING", "Esta transferência já foi confirmada, cancelada ou expirou.");
 
@@ -53,6 +53,10 @@ public sealed class ConfirmacaoNecessariaException(string finalidade) : NegocioE
 {
     public string Finalidade { get; } = finalidade;
 }
+
+public sealed class ChaveJaExisteException() : NegocioException("KEY_ALREADY_EXISTS", "Esta chave já está em uso.");
+
+public sealed class LimiteDeChavesException() : NegocioException("KEY_LIMIT_REACHED", "A conta já tem o máximo de 5 chaves.");
 
 public sealed class RostoNaoDetectadoException() : NegocioException("NO_FACE_DETECTED", "Não encontramos um rosto na foto. Enquadre o rosto e tente de novo.");
 
