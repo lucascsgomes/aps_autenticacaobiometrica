@@ -31,6 +31,9 @@ public static class DependencyInjection
         servicos.AddScoped<ServicoDeAutenticacao>();
         servicos.AddScoped<ServicoDeCadastro>();
         servicos.AddScoped<ServicoDeTransferencia>();
+        servicos.AddScoped<ServicoDeDesafios>();
+        servicos.AddScoped<ServicoDeLoginFacial>();
+        servicos.AddSingleton(new LimiaresFaciais(configuracao.GetValue("Biometria:LimiarLogin", 0.363m)));
         servicos.AddScoped<ServicoDeLimites>();
         servicos.AddScoped<ServicoDeIdempotencia>();
 

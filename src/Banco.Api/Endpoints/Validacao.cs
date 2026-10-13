@@ -58,6 +58,31 @@ internal static partial class Validacao
         return erros;
     }
 
+    public static Dictionary<string, string[]> SoCpf(string? cpf)
+    {
+        var erros = new Dictionary<string, string[]>();
+        ValidarCpf(cpf, erros, formatoApenas: true);
+        return erros;
+    }
+
+    public static Dictionary<string, string[]> Retomar(RetomarRequest? r)
+    {
+        var erros = Login(r is null ? null : new LoginSenhaRequest(r.Cpf, r.Senha));
+        if (r?.Acao is not ("RETOMAR" or "RECOMECAR"))
+        {
+            erros["acao"] = ["Use RETOMAR ou RECOMECAR."];
+        }
+        else if (r.Acao == "RECOMECAR")
+        {
+            foreach (var (campo, mensagens) in Cadastro(r.Dados is null ? null : r.Dados with { Cpf = r.Cpf }))
+            {
+                erros[$"dados.{campo}"] = mensagens;
+            }
+        }
+
+        return erros;
+    }
+
     public static IResult Problema(Dictionary<string, string[]> erros) =>
         Results.Problem(new ProblemDetails
         {

@@ -65,6 +65,7 @@ internal sealed partial class TratadorGlobalDeExcecoes(
             ImagemInvalidaException => (StatusCodes.Status400BadRequest, "Imagem inválida"),
             ImagemGrandeException => (StatusCodes.Status413PayloadTooLarge, "Imagem grande demais"),
             ServicoFacialIndisponivelException => (StatusCodes.Status503ServiceUnavailable, "Reconhecimento facial indisponível"),
+            FaceNaoVerificadaException => (StatusCodes.Status401Unauthorized, "Rosto não confirmado"),
             TokenDeCadastroEncerradoException => (StatusCodes.Status401Unauthorized, "Cadastro encerrado"),
             ChaveNaoEncontradaException => (StatusCodes.Status404NotFound, "Chave não encontrada"),
             ChaveInvalidaException => (StatusCodes.Status422UnprocessableEntity, "Chave inválida"),

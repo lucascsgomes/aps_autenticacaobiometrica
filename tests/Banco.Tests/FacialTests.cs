@@ -86,11 +86,18 @@ public class ClienteFacialHttpTests
 
         public string? CampoDoArquivo { get; private set; }
 
+        public Dictionary<string, string> Campos { get; } = [];
+
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Requisicao = request;
             var partes = await ((MultipartFormDataContent)request.Content!).First().ReadAsByteArrayAsync(cancellationToken);
             CampoDoArquivo = ((MultipartFormDataContent)request.Content!).First().Headers.ContentDisposition?.Name?.Trim('"') + ":" + partes.Length;
+            foreach (var parte in (MultipartFormDataContent)request.Content!)
+            {
+                Campos[parte.Headers.ContentDisposition!.Name!.Trim('"')] = await parte.ReadAsStringAsync(cancellationToken);
+            }
+
             return await resposta(request);
         }
     }
@@ -144,5 +151,31 @@ public class ClienteFacialHttpTests
         await Assert.ThrowsAsync<ServicoFacialIndisponivelException>(() => Cliente(recusada).CadastrarAsync([1], null));
         await Assert.ThrowsAsync<ServicoFacialIndisponivelException>(() => Cliente(vetorCurto).CadastrarAsync([1], null));
         await Assert.ThrowsAsync<ServicoFacialIndisponivelException>(() => Cliente(semJson).CadastrarAsync([1], null));
+    }
+
+    [Fact]
+    public async Task Verificar_envia_foto_referencia_e_limiar_e_devolve_o_resultado()
+    {
+        var falso = new Falso(_ => Task.FromResult(Json(HttpStatusCode.OK, """{"match":true,"score":0.71,"threshold":0.363,"request_id":"r"}""")));
+        var referencia = new byte[512];
+        referencia[0] = 7;
+
+        var resultado = await Cliente(falso).VerificarAsync([1, 2], referencia, 0.363m, "req-2");
+
+        Assert.True(resultado.Corresponde);
+        Assert.Equal(0.71, resultado.Score);
+        Assert.Equal("http://face.local/internal/v1/face/verify", falso.Requisicao!.RequestUri!.ToString());
+        Assert.Equal(Convert.ToBase64String(referencia), falso.Campos["reference_b64"]);
+        Assert.Equal("0.363", falso.Campos["threshold"]); // ponto decimal, em qualquer cultura do servidor
+    }
+
+    [Theory]
+    [InlineData("INVALID_REFERENCE")]
+    [InlineData("INVALID_THRESHOLD")]
+    public async Task Referencia_ou_limiar_recusados_sao_bug_nosso_e_viram_erro_interno_nao_servico_indisponivel(string code)
+    {
+        var falso = new Falso(_ => Task.FromResult(Json(HttpStatusCode.BadRequest, $$"""{"code":"{{code}}"}""")));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Cliente(falso).VerificarAsync([1], new byte[512], 0.363m, null));
     }
 }

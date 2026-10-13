@@ -76,6 +76,27 @@ public sealed partial class Usuario
         };
     }
 
+    /// <summary>
+    /// "Recomeçar" um cadastro que parou no rosto: troca os dados e a senha do mesmo usuário pendente, sem criar outro.
+    /// Passa pelas mesmas validações do cadastro. O CPF não muda.
+    /// </summary>
+    public void ReiniciarCadastro(string nome, string email, string? celular, string senhaHash, string versaoTermo, DateTimeOffset agora)
+    {
+        if (Status != StatusUsuario.CadastroPendente)
+        {
+            throw new InvalidOperationException("Só um cadastro pendente pode ser recomeçado.");
+        }
+
+        var novo = Cadastrar(nome, Cpf, email, celular, senhaHash, agora);
+        Nome = novo.Nome;
+        Email = novo.Email;
+        Celular = novo.Celular;
+        SenhaHash = novo.SenhaHash;
+        FalhasConsecutivas = 0;
+        BloqueadoAte = null;
+        RegistrarConsentimentoBiometrico(versaoTermo, agora);
+    }
+
     /// <summary>LGPD art. 11: o consentimento da biometria é específico e fica registrado com a versão do termo.</summary>
     public void RegistrarConsentimentoBiometrico(string versaoTermo, DateTimeOffset agora)
     {

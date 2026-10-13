@@ -24,6 +24,11 @@ internal static class AuthEndpoints
     {
         var auth = rotas.MapGroup("/v1/auth");
         auth.MapPost("/register", Registrar).RequireRateLimiting(Limites.Publico);
+        auth.MapPost("/register/retomar", Retomar).RequireRateLimiting(Limites.Biometria);
+        auth.MapPost("/login/desafio", AbrirDesafioDeLogin).RequireRateLimiting(Limites.Biometria);
+        auth.MapPost("/login/face", LoginComRosto)
+            .RequireRateLimiting(Limites.Biometria)
+            .WithMetadata(new RequestSizeLimitAttribute(TamanhoMaximoDaRequisicao));
         auth.MapPost("/login/senha", LoginComSenha).RequireRateLimiting(Limites.Biometria);
         auth.MapPost("/face/enroll", CadastrarRosto)
             .RequireAuthorization(JwtOpcoes.PoliticaDeCadastro)
@@ -85,20 +90,17 @@ internal static class AuthEndpoints
             return Results.Unauthorized();
         }
 
-        var imagem = await LerImagemAsync(http.Request, cancelamento);
+        var imagem = LerImagem(await LerFormularioAsync(http.Request, cancelamento));
         var embedding = await facial.CadastrarAsync(imagem, http.TraceIdentifier, cancelamento);
         var sessao = await cadastro.ConcluirComRostoAsync(usuarioId, embedding, cancelamento);
         return Results.Json(MontarSessao(sessao, jwt, MetodoFace), statusCode: StatusCodes.Status201Created);
     }
 
-    private static async Task<byte[]> LerImagemAsync(HttpRequest requisicao, CancellationToken cancelamento)
-    {
-        if (!requisicao.HasFormContentType)
-        {
-            throw new ImagemInvalidaException();
-        }
+    private static async Task<IFormCollection> LerFormularioAsync(HttpRequest requisicao, CancellationToken cancelamento) =>
+        requisicao.HasFormContentType ? await requisicao.ReadFormAsync(cancelamento) : throw new ImagemInvalidaException();
 
-        var formulario = await requisicao.ReadFormAsync(cancelamento);
+    private static byte[] LerImagem(IFormCollection formulario)
+    {
         if (formulario.Files.GetFile("image") is not { Length: > 0 } arquivo)
         {
             throw new ImagemInvalidaException();
@@ -109,10 +111,60 @@ internal static class AuthEndpoints
             throw new ImagemGrandeException();
         }
 
-        await using var fluxo = arquivo.OpenReadStream();
+        using var fluxo = arquivo.OpenReadStream();
         using var memoria = new MemoryStream((int)arquivo.Length);
-        await fluxo.CopyToAsync(memoria, cancelamento);
+        fluxo.CopyTo(memoria);
         return memoria.ToArray();
+    }
+
+    // Responde 200 com a mesma forma exista o CPF ou não: quem consulta não descobre quem tem conta nem quem tem rosto.
+    private static async Task<IResult> AbrirDesafioDeLogin(LoginDesafioRequest? corpo, HttpContext http, ServicoDeLoginFacial login, CancellationToken cancelamento)
+    {
+        var erros = Validacao.SoCpf(corpo?.Cpf);
+        if (erros.Count > 0)
+        {
+            return Validacao.Problema(erros);
+        }
+
+        var desafio = await login.AbrirDesafioAsync(corpo!.Cpf!, http.Connection.RemoteIpAddress, cancelamento);
+        return Results.Ok(new DesafioResponse(desafio.Id, desafio.ExpiraEm, "Posicione o rosto na moldura e toque em Entrar."));
+    }
+
+    // Foto sem rosto ou com vários (422) devolve o desafio: dá para tirar outra foto com o mesmo desafio_id, até 5 vezes.
+    private static async Task<IResult> LoginComRosto(HttpContext http, ServicoDeLoginFacial login, JwtEmissor jwt, CancellationToken cancelamento)
+    {
+        var formulario = await LerFormularioAsync(http.Request, cancelamento);
+        if (!Guid.TryParse(formulario["desafio_id"], out var desafioId))
+        {
+            return Validacao.Problema(new Dictionary<string, string[]> { ["desafio_id"] = ["Informe o desafio recebido em login/desafio."] });
+        }
+
+        var imagem = LerImagem(formulario);
+        var sessao = await login.EntrarAsync(desafioId, imagem, http.TraceIdentifier, cancelamento);
+        return Results.Ok(MontarSessao(sessao, jwt, MetodoFace));
+    }
+
+    private static async Task<IResult> Retomar(RetomarRequest? corpo, ServicoDeCadastro cadastro, JwtEmissor jwt, CancellationToken cancelamento)
+    {
+        var erros = Validacao.Retomar(corpo);
+        if (erros.Count > 0)
+        {
+            return Validacao.Problema(erros);
+        }
+
+        var posse = await cadastro.ProvarPosseAsync(corpo!.Cpf!, corpo.Senha!, cancelamento);
+        if (corpo.Acao == "RETOMAR")
+        {
+            var retomado = jwt.EmitirDeCadastro(posse.UsuarioId);
+            return Results.Ok(new RetomarResponse(retomado.Token, retomado.ExpiraEm, CapturaFacial));
+        }
+
+        var d = corpo.Dados!;
+        await cadastro.RecomecarAsync(posse.UsuarioId, new NovoCadastro(d.Nome!, corpo.Cpf!, d.Email!, d.Celular, d.Senha!, d.ConsentimentoBiometrico!.VersaoTermo!), cancelamento);
+        var recomecado = jwt.EmitirDeCadastro(posse.UsuarioId);
+        return Results.Json(
+            new RegistrarResponse(posse.UsuarioId, new ContaResumoDto(posse.ContaId, posse.Agencia, posse.Numero), CapturaFacial, null, recomecado.Token, recomecado.ExpiraEm),
+            statusCode: StatusCodes.Status201Created);
     }
 
     private static async Task<IResult> LoginComSenha(

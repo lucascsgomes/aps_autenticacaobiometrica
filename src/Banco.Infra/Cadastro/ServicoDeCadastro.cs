@@ -17,6 +17,8 @@ public sealed record NovoCadastro(string Nome, string Cpf, string Email, string?
 
 public sealed record CadastroCriado(Guid UsuarioId, string Nome, Guid ContaId, string Agencia, string Numero, StatusUsuario Status, string? RefreshToken);
 
+public sealed record CadastroRetomado(Guid UsuarioId, string Nome, Guid ContaId, string Agencia, string Numero);
+
 public sealed class ServicoDeCadastro(BancoDbContext banco, ServicoDeSenha senhas, RefreshTokenServico refresh, CifraDeTemplate cifra, TimeProvider relogio)
 {
     public static readonly Dinheiro CreditoInicial = Dinheiro.DeReais(5_000);
@@ -78,6 +80,62 @@ public sealed class ServicoDeCadastro(BancoDbContext banco, ServicoDeSenha senha
         await banco.SaveChangesAsync(cancelamento);
         await transacao.CommitAsync(cancelamento);
         return new SessaoEmitida(usuarioId, usuario.Nome, conta.Id, refreshToken);
+    }
+
+    /// <summary>
+    /// Prova a posse de um cadastro pendente pelo CPF e pela senha informados no cadastro. CPF inexistente, cadastro que não
+    /// está pendente e senha errada respondem igual (e contam para o bloqueio); só quem acerta a senha descobre que o cadastro já foi concluído.
+    /// </summary>
+    public async Task<CadastroRetomado> ProvarPosseAsync(string cpf, string senha, CancellationToken cancelamento = default)
+    {
+        var agora = relogio.GetUtcNow();
+        var usuario = await banco.Usuarios.SingleOrDefaultAsync(u => u.Cpf == cpf, cancelamento);
+        var senhaCorreta = senhas.Verificar(usuario?.SenhaHash, senha);
+
+        if (usuario is null || usuario.Status == StatusUsuario.Bloqueado || usuario.Status == StatusUsuario.Encerrado)
+        {
+            throw new CredenciaisInvalidasException();
+        }
+
+        if (!senhaCorreta)
+        {
+            if (!usuario.EstaBloqueado(agora))
+            {
+                usuario.RegistrarFalhaDeCredencial(agora);
+                await banco.SaveChangesAsync(cancelamento);
+            }
+
+            throw new CredenciaisInvalidasException();
+        }
+
+        if (usuario.EstaBloqueado(agora))
+        {
+            throw new ContaBloqueadaException(usuario.BloqueadoAte!.Value - agora);
+        }
+
+        if (usuario.Status != StatusUsuario.CadastroPendente)
+        {
+            throw new ConflitoDeCadastroException();
+        }
+
+        var conta = await banco.Contas.AsNoTracking().SingleAsync(c => c.UsuarioId == usuario.Id, cancelamento);
+        return new CadastroRetomado(usuario.Id, usuario.Nome, conta.Id, conta.Agencia, conta.Numero);
+    }
+
+    /// <summary>Sobrescreve os dados do cadastro pendente (mesmo usuário e mesma conta). Quem chama já provou a posse.</summary>
+    public async Task RecomecarAsync(Guid usuarioId, NovoCadastro dados, CancellationToken cancelamento = default)
+    {
+        var senhaHash = senhas.Hash(dados.Senha);
+        var usuario = await banco.Usuarios.SingleAsync(u => u.Id == usuarioId, cancelamento);
+        usuario.ReiniciarCadastro(dados.Nome, dados.Email, dados.Celular, senhaHash, dados.VersaoTermoBiometria, relogio.GetUtcNow());
+        try
+        {
+            await banco.SaveChangesAsync(cancelamento);
+        }
+        catch (DbUpdateException e) when (e.InnerException is PostgresException { SqlState: ViolacaoDeUnicidade })
+        {
+            throw new ConflitoDeCadastroException();
+        }
     }
 
     private async Task<CadastroCriado> TentarAsync(NovoCadastro dados, string senhaHash, bool concluirSemRosto, CancellationToken cancelamento)

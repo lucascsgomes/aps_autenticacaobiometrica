@@ -26,8 +26,6 @@ public class FaceEnrollTests : IClassFixture<FaceEnrollTests.SemAtalho>
         }
     }
 
-    private static int _sequencia = 7000;
-
     private readonly ApiFactory _fabrica;
     private readonly HttpClient _cliente;
 
@@ -38,47 +36,12 @@ public class FaceEnrollTests : IClassFixture<FaceEnrollTests.SemAtalho>
         _cliente = _fabrica.CreateClient();
     }
 
-    private async Task<(string Cpf, RegistrarResponse Cadastro)> PendenteAsync()
-    {
-        var n = Interlocked.Increment(ref _sequencia);
-        var cpf = AuthTests.CpfValido(n);
-        var resposta = await _cliente.PostAsJsonAsync("/v1/auth/register", new
-        {
-            nome = "Ana Beatriz Moreira",
-            cpf,
-            email = $"rosto{n}@exemplo.com",
-            senha = ClienteDeTeste.Senha,
-            consentimento_biometrico = new { aceito = true, versao_termo = "2026-10-v1" },
-        }, ClienteDeTeste.Json);
-        Assert.Equal(HttpStatusCode.Created, resposta.StatusCode);
-        return (cpf, await resposta.Ler<RegistrarResponse>());
-    }
+    private Task<(string Cpf, RegistrarResponse Cadastro)> PendenteAsync() => _cliente.CadastrarPendenteAsync();
 
-    private Task<HttpResponseMessage> Enrolar(string? token, byte[]? imagem = null, string campo = "image")
-    {
-        var requisicao = new HttpRequestMessage(HttpMethod.Post, "/v1/auth/face/enroll");
-        if (token is not null)
-        {
-            requisicao.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        }
+    private Task<HttpResponseMessage> Enrolar(string? token, byte[]? imagem = null, string campo = "image") =>
+        _cliente.EnviarFormularioAsync("/v1/auth/face/enroll", token, imagem, campo, imagem is null ? [("outro", "x")] : []);
 
-        var corpo = new MultipartFormDataContent();
-        if (imagem is not null)
-        {
-            var arquivo = new ByteArrayContent(imagem);
-            arquivo.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
-            corpo.Add(arquivo, campo, "rosto.jpg");
-        }
-        else
-        {
-            corpo.Add(new StringContent("x"), "outro");
-        }
-
-        requisicao.Content = corpo;
-        return _cliente.SendAsync(requisicao);
-    }
-
-    private static readonly byte[] Foto = [0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3, 4];
+    private static readonly byte[] Foto = ClienteDeTeste.Foto;
 
     private static async Task<string?> Code(HttpResponseMessage resposta)
     {

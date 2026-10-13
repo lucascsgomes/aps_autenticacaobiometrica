@@ -16,6 +16,7 @@ public sealed class BancoDbContext(DbContextOptions<BancoDbContext> opcoes) : Db
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<ChaveTransferencia> Chaves => Set<ChaveTransferencia>();
     public DbSet<TemplateFacial> Templates => Set<TemplateFacial>();
+    public DbSet<DesafioBiometrico> Desafios => Set<DesafioBiometrico>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) =>
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(BancoDbContext).Assembly);

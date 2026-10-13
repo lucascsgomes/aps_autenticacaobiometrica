@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -11,11 +12,17 @@ using Polly.Timeout;
 
 namespace Banco.Infra.Facial;
 
+/// <summary>O score existe para auditoria interna. Nenhuma resposta da API o repete: score na mão do cliente vira oráculo.</summary>
+public sealed record ResultadoDaVerificacao(bool Corresponde, double Score);
+
 /// <summary>Fala com o face-service. Sem estado e sem guardar nada: a imagem só passa.</summary>
 public interface IClienteFacial
 {
     /// <summary>Devolve o vetor facial (128 floats de 32 bits, 512 bytes). Lança as exceções de negócio do rosto ou <see cref="ServicoFacialIndisponivelException"/>.</summary>
     Task<byte[]> CadastrarAsync(byte[] imagem, string? idDaRequisicao, CancellationToken cancelamento = default);
+
+    /// <summary>Compara a foto com o vetor de referência (já decifrado) no limiar dado. Mesmas exceções de <see cref="CadastrarAsync"/>.</summary>
+    Task<ResultadoDaVerificacao> VerificarAsync(byte[] imagem, byte[] referencia, decimal limiar, string? idDaRequisicao, CancellationToken cancelamento = default);
 }
 
 public sealed class OpcoesFaciais
@@ -31,6 +38,9 @@ internal sealed class ClienteFacialNaoConfigurado : IClienteFacial
 {
     public Task<byte[]> CadastrarAsync(byte[] imagem, string? idDaRequisicao, CancellationToken cancelamento = default) =>
         throw new ServicoFacialIndisponivelException();
+
+    public Task<ResultadoDaVerificacao> VerificarAsync(byte[] imagem, byte[] referencia, decimal limiar, string? idDaRequisicao, CancellationToken cancelamento = default) =>
+        throw new ServicoFacialIndisponivelException();
 }
 
 public sealed partial class ClienteFacialHttp(HttpClient http, ILogger<ClienteFacialHttp> logger) : IClienteFacial
@@ -39,11 +49,58 @@ public sealed partial class ClienteFacialHttp(HttpClient http, ILogger<ClienteFa
 
     public async Task<byte[]> CadastrarAsync(byte[] imagem, string? idDaRequisicao, CancellationToken cancelamento = default)
     {
-        using var conteudo = new MultipartFormDataContent();
-        var arquivo = new ByteArrayContent(imagem);
+        using var conteudo = new MultipartFormDataContent { { Imagem(imagem), "image", "rosto" } };
+        using var resposta = await PostarAsync("internal/v1/face/enroll", conteudo, idDaRequisicao, cancelamento);
+
+        var corpo = await resposta.Content.ReadFromJsonAsync<RespostaDeEnroll>(Json, cancelamento);
+        try
+        {
+            var bytes = Convert.FromBase64String(corpo?.EmbeddingB64 ?? string.Empty);
+            if (bytes.Length == TemplateFacial.Dimensao * sizeof(float) && corpo!.Dim == TemplateFacial.Dimensao)
+            {
+                return bytes;
+            }
+        }
+        catch (FormatException)
+        {
+            // cai no erro abaixo
+        }
+
+        LogarRecusa(logger, (int)resposta.StatusCode, "EMBEDDING_INVALIDO");
+        throw new ServicoFacialIndisponivelException();
+    }
+
+    public async Task<ResultadoDaVerificacao> VerificarAsync(byte[] imagem, byte[] referencia, decimal limiar, string? idDaRequisicao, CancellationToken cancelamento = default)
+    {
+        using var conteudo = new MultipartFormDataContent
+        {
+            { Imagem(imagem), "image", "rosto" },
+            { new StringContent(Convert.ToBase64String(referencia)), "reference_b64" },
+            { new StringContent(limiar.ToString(CultureInfo.InvariantCulture)), "threshold" },
+        };
+        using var resposta = await PostarAsync("internal/v1/face/verify", conteudo, idDaRequisicao, cancelamento);
+
+        var corpo = await resposta.Content.ReadFromJsonAsync<RespostaDeVerify>(Json, cancelamento);
+        if (corpo is null)
+        {
+            LogarRecusa(logger, (int)resposta.StatusCode, "VERIFY_INVALIDO");
+            throw new ServicoFacialIndisponivelException();
+        }
+
+        return new ResultadoDaVerificacao(corpo.Match, corpo.Score);
+    }
+
+    private static ByteArrayContent Imagem(byte[] bytes)
+    {
+        var arquivo = new ByteArrayContent(bytes);
         arquivo.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-        conteudo.Add(arquivo, "image", "rosto");
-        using var requisicao = new HttpRequestMessage(HttpMethod.Post, "internal/v1/face/enroll") { Content = conteudo };
+        return arquivo;
+    }
+
+    /// <summary>Envia e devolve só respostas de sucesso. O resto vira a exceção de negócio certa.</summary>
+    private async Task<HttpResponseMessage> PostarAsync(string rota, HttpContent conteudo, string? idDaRequisicao, CancellationToken cancelamento)
+    {
+        using var requisicao = new HttpRequestMessage(HttpMethod.Post, rota) { Content = conteudo };
         if (idDaRequisicao is not null)
         {
             requisicao.Headers.Add("X-Request-Id", idDaRequisicao);
@@ -61,13 +118,13 @@ public sealed partial class ClienteFacialHttp(HttpClient http, ILogger<ClienteFa
             throw new ServicoFacialIndisponivelException();
         }
 
+        if (resposta.IsSuccessStatusCode)
+        {
+            return resposta;
+        }
+
         using (resposta)
         {
-            if (resposta.IsSuccessStatusCode)
-            {
-                return await LerEmbeddingAsync(resposta, cancelamento);
-            }
-
             var codigo = await LerCodigoAsync(resposta, cancelamento);
             switch (codigo)
             {
@@ -79,32 +136,16 @@ public sealed partial class ClienteFacialHttp(HttpClient http, ILogger<ClienteFa
                     throw new ImagemInvalidaException();
                 case "IMAGE_TOO_LARGE":
                     throw new ImagemGrandeException();
+                case "INVALID_REFERENCE" or "INVALID_THRESHOLD":
+                    // Bug nosso ou template corrompido: não é culpa do usuário nem do serviço. Vira 500 e alerta.
+                    LogarRecusa(logger, (int)resposta.StatusCode, codigo);
+                    throw new InvalidOperationException($"face-service recusou a referência ou o limiar enviados ({codigo}).");
                 default:
                     // Chave interna errada, modelos fora, 5xx, resposta que não entendemos: tudo é serviço indisponível.
                     LogarRecusa(logger, (int)resposta.StatusCode, codigo ?? "?");
                     throw new ServicoFacialIndisponivelException();
             }
         }
-    }
-
-    private async Task<byte[]> LerEmbeddingAsync(HttpResponseMessage resposta, CancellationToken cancelamento)
-    {
-        var corpo = await resposta.Content.ReadFromJsonAsync<RespostaDeEnroll>(Json, cancelamento);
-        try
-        {
-            var bytes = Convert.FromBase64String(corpo?.EmbeddingB64 ?? string.Empty);
-            if (bytes.Length == TemplateFacial.Dimensao * sizeof(float) && corpo!.Dim == TemplateFacial.Dimensao)
-            {
-                return bytes;
-            }
-        }
-        catch (FormatException)
-        {
-            // cai no erro abaixo
-        }
-
-        LogarRecusa(logger, (int)resposta.StatusCode, "EMBEDDING_INVALIDO");
-        throw new ServicoFacialIndisponivelException();
     }
 
     private static async Task<string?> LerCodigoAsync(HttpResponseMessage resposta, CancellationToken cancelamento)
@@ -125,6 +166,8 @@ public sealed partial class ClienteFacialHttp(HttpClient http, ILogger<ClienteFa
     }
 
     private sealed record RespostaDeEnroll([property: JsonPropertyName("embedding_b64")] string? EmbeddingB64, int Dim);
+
+    private sealed record RespostaDeVerify(bool Match, double Score);
 
     private sealed record RespostaDeErro(string? Code);
 

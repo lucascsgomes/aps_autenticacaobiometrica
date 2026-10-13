@@ -84,6 +84,41 @@ public class UsuarioBloqueioTests
     }
 }
 
+public class ReiniciarCadastroTests
+{
+    private static readonly DateTimeOffset Agora = new(2026, 3, 10, 14, 0, 0, TimeSpan.Zero);
+
+    [Fact]
+    public void Troca_os_dados_e_zera_o_bloqueio_mas_mantem_usuario_e_cpf()
+    {
+        var u = Usuario.Cadastrar("Ana Souza", "52998224725", "ana@exemplo.com", null, "hash", Agora);
+        for (var i = 0; i < 5; i++)
+        {
+            u.RegistrarFalhaDeCredencial(Agora);
+        }
+
+        u.ReiniciarCadastro("Ana Beatriz", "Nova@Exemplo.com", "+5511987654321", "hash-novo", "v2", Agora.AddHours(1));
+
+        Assert.Equal("Ana Beatriz", u.Nome);
+        Assert.Equal("nova@exemplo.com", u.Email);
+        Assert.Equal("hash-novo", u.SenhaHash);
+        Assert.Equal("v2", u.VersaoTermoBiometria);
+        Assert.Equal("52998224725", u.Cpf);
+        Assert.Equal(0, u.FalhasConsecutivas);
+        Assert.False(u.EstaBloqueado(Agora));
+    }
+
+    [Fact]
+    public void So_vale_para_cadastro_pendente_e_dados_validos()
+    {
+        var u = Usuario.Cadastrar("Ana Souza", "52998224725", "ana@exemplo.com", null, "hash", Agora);
+        Assert.Throws<ArgumentException>(() => u.ReiniciarCadastro("A", "ana@exemplo.com", null, "hash", "v1", Agora));
+
+        u.ConcluirCadastro(Agora);
+        Assert.Throws<InvalidOperationException>(() => u.ReiniciarCadastro("Ana Souza", "ana@exemplo.com", null, "hash", "v1", Agora));
+    }
+}
+
 public class RefreshTokenTests
 {
     private static readonly DateTimeOffset Agora = new(2026, 3, 10, 14, 0, 0, TimeSpan.Zero);

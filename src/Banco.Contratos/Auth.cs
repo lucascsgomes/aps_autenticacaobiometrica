@@ -42,3 +42,12 @@ public sealed record RegistrarResponse(
 public sealed record TitularDto(string Nome);
 
 public sealed record ContaMeResponse(Guid Id, string Agencia, string Numero, string Status, long SaldoCentavos, TitularDto Titular, IReadOnlyList<ChaveDto> Chaves);
+
+public sealed record LoginDesafioRequest(string? Cpf);
+
+public sealed record DesafioResponse(Guid DesafioId, DateTimeOffset ExpiraEm, string Instrucao);
+
+/// <summary><c>acao</c> é RETOMAR (mantém os dados) ou RECOMECAR (exige <c>dados</c>, no mesmo formato do cadastro).</summary>
+public sealed record RetomarRequest(string? Cpf, string? Senha, string? Acao, RegistrarRequest? Dados);
+
+public sealed record RetomarResponse(string CadastroToken, DateTimeOffset ExpiraEm, string ProximoPasso);

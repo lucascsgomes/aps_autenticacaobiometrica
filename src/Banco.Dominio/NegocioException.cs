@@ -65,4 +65,7 @@ public sealed class ImagemGrandeException() : NegocioException("IMAGE_TOO_LARGE"
 /// <summary>Falha fechada: sem o serviço facial o rosto nunca é aceito. A senha continua valendo onde a rota permite.</summary>
 public sealed class ServicoFacialIndisponivelException() : NegocioException("FACE_SERVICE_UNAVAILABLE", "O reconhecimento facial está indisponível agora. Tente de novo em instantes.");
 
+/// <summary>Desafio inexistente, vencido ou usado, usuário sem conta ou sem rosto, e rosto que não bate: tudo responde igual.</summary>
+public sealed class FaceNaoVerificadaException() : NegocioException("FACE_NOT_VERIFIED", "Não foi possível confirmar o rosto.");
+
 public sealed class TokenDeCadastroEncerradoException() : NegocioException("FACE_TOKEN_EXPIRED", "Este cadastro não está mais aguardando o rosto.");
