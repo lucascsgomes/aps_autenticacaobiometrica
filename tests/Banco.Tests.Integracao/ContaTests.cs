@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Banco.Contratos;
@@ -15,43 +14,13 @@ namespace Banco.Tests.Integracao;
 /// <summary>Extrato por cursor, chaves de transferência e rate limit, com a API inteira e PostgreSQL real.</summary>
 public class ContaTests(ApiFactory fabrica) : IClassFixture<ApiFactory>
 {
-    private const string Senha = "uma-senha-longa-e-unica";
-    private static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
-    private static int _sequencia = 1000;
-
     private readonly HttpClient _cliente = fabrica.CreateClient();
 
-    private sealed record Titular(string Cpf, SessaoResponse Sessao, ContaMeResponse Conta);
+    private Task<Titular> NovoTitularAsync(string nome = "Ana Beatriz Moreira") => _cliente.NovoTitularAsync(nome);
 
-    private async Task<Titular> NovoTitularAsync(string nome = "Ana Beatriz Moreira")
-    {
-        var n = Interlocked.Increment(ref _sequencia);
-        var cpf = AuthTests.CpfValido(n);
-        var resposta = await _cliente.PostAsJsonAsync("/v1/auth/register", new
-        {
-            nome,
-            cpf,
-            email = $"conta{n}@exemplo.com",
-            senha = Senha,
-            consentimento_biometrico = new { aceito = true, versao_termo = "2026-10-v1" },
-        }, Json);
-        var sessao = (await Ler<RegistrarResponse>(resposta)).Sessao!;
-        var conta = await Ler<ContaMeResponse>(await Pegar("/v1/contas/me", sessao));
-        return new Titular(cpf, sessao, conta);
-    }
+    private static Task<T> Ler<T>(HttpResponseMessage resposta) => resposta.Ler<T>();
 
-    private static async Task<T> Ler<T>(HttpResponseMessage resposta) => (await resposta.Content.ReadFromJsonAsync<T>(Json))!;
-
-    private Task<HttpResponseMessage> Enviar(HttpMethod metodo, string rota, SessaoResponse? sessao)
-    {
-        var requisicao = new HttpRequestMessage(metodo, rota);
-        if (sessao is not null)
-        {
-            requisicao.Headers.Authorization = new AuthenticationHeaderValue("Bearer", sessao.AccessToken);
-        }
-
-        return _cliente.SendAsync(requisicao);
-    }
+    private Task<HttpResponseMessage> Enviar(HttpMethod metodo, string rota, SessaoResponse? sessao) => _cliente.Enviar(metodo, rota, sessao);
 
     private Task<HttpResponseMessage> Pegar(string rota, SessaoResponse? sessao) => Enviar(HttpMethod.Get, rota, sessao);
 
@@ -160,7 +129,7 @@ public class ContaTests(ApiFactory fabrica) : IClassFixture<ApiFactory>
         var chave = Assert.Single(ana.Conta.Chaves);
         Assert.Equal("CPF", chave.Tipo);
         Assert.StartsWith("***.", chave.ValorMascarado, StringComparison.Ordinal);
-        Assert.DoesNotContain(ana.Cpf, JsonSerializer.Serialize(ana.Conta, Json), StringComparison.Ordinal);
+        Assert.DoesNotContain(ana.Cpf, JsonSerializer.Serialize(ana.Conta, ClienteDeTeste.Json), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -174,7 +143,7 @@ public class ContaTests(ApiFactory fabrica) : IClassFixture<ApiFactory>
 
         Assert.Equal("Beatriz L***", deTerceiro.NomeMascarado);
         Assert.False(deTerceiro.Propria);
-        Assert.DoesNotContain(bia.Cpf, JsonSerializer.Serialize(deTerceiro, Json), StringComparison.Ordinal);
+        Assert.DoesNotContain(bia.Cpf, JsonSerializer.Serialize(deTerceiro, ClienteDeTeste.Json), StringComparison.Ordinal);
         Assert.True(propria.Propria);
     }
 
@@ -219,10 +188,10 @@ public class ContaTests(ApiFactory fabrica) : IClassFixture<ApiFactory>
 
         for (var i = 0; i < 5; i++)
         {
-            Assert.Equal(HttpStatusCode.Unauthorized, (await cliente.PostAsJsonAsync("/v1/auth/login/senha", corpo, Json)).StatusCode);
+            Assert.Equal(HttpStatusCode.Unauthorized, (await cliente.PostAsJsonAsync("/v1/auth/login/senha", corpo, ClienteDeTeste.Json)).StatusCode);
         }
 
-        var barrada = await cliente.PostAsJsonAsync("/v1/auth/login/senha", corpo, Json);
+        var barrada = await cliente.PostAsJsonAsync("/v1/auth/login/senha", corpo, ClienteDeTeste.Json);
 
         Assert.Equal(HttpStatusCode.TooManyRequests, barrada.StatusCode);
         Assert.True(barrada.Headers.RetryAfter?.Delta > TimeSpan.Zero);

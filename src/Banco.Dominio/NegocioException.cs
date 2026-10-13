@@ -23,3 +23,23 @@ public sealed class NaoAutenticadoException() : NegocioException("UNAUTHORIZED",
 public sealed class ChaveNaoEncontradaException() : NegocioException("KEY_NOT_FOUND", "Chave não encontrada.");
 
 public sealed class ChaveInvalidaException() : NegocioException("INVALID_KEY_FORMAT", "A chave não tem um formato válido.");
+
+public sealed class TransferenciaNaoEncontradaException() : NegocioException("NOT_FOUND", "Transferência não encontrada.");
+
+public sealed class MesmaContaException() : NegocioException("SAME_ACCOUNT", "Origem e destino são a mesma conta.");
+
+public sealed class DestinoIndisponivelException() : NegocioException("DESTINATION_UNAVAILABLE", "A conta de destino não pode receber agora.");
+
+public sealed class SaldoInsuficienteException() : NegocioException("INSUFFICIENT_FUNDS", "Saldo insuficiente para esta transferência.");
+
+public sealed class SenhaNaoVerificadaException() : NegocioException("PASSWORD_NOT_VERIFIED", "Senha não confere. A transferência foi cancelada.");
+
+public sealed class TransferenciaNaoPendenteException() : NegocioException("TRANSFER_NOT_PENDING", "Esta transferência já foi confirmada, cancelada ou expirou.");
+
+public sealed class TransferenciaExpiradaException() : NegocioException("TRANSFER_EXPIRED", "O tempo para confirmar acabou. Refaça a transferência.");
+
+public sealed class ChaveDeIdempotenciaObrigatoriaException() : NegocioException("IDEMPOTENCY_KEY_REQUIRED", "Envie o cabeçalho Idempotency-Key (de 8 a 255 caracteres).");
+
+public sealed class ChaveDeIdempotenciaReusadaException() : NegocioException("IDEMPOTENCY_KEY_REUSED", "Esta Idempotency-Key já foi usada em outra operação.");
+
+public sealed class RequisicaoEmAndamentoException() : NegocioException("REQUEST_IN_PROGRESS", "Uma chamada com esta Idempotency-Key ainda está em andamento.");

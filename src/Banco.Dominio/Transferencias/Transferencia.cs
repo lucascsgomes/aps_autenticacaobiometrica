@@ -40,6 +40,9 @@ public sealed class Transferencia
 {
     public const int TamanhoMaximoDescricao = 140;
 
+    /// <summary>Quanto tempo a intenção espera pela confirmação antes de expirar.</summary>
+    public static readonly TimeSpan ValidadeDaConfirmacao = TimeSpan.FromSeconds(90);
+
     private const string AlfabetoE2e = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
     public Guid Id { get; private set; }
@@ -103,6 +106,8 @@ public sealed class Transferencia
         t.E2eId = GerarE2eId(agora);
         return t;
     }
+
+    public bool Venceu(DateTimeOffset agora) => agora - CriadaEm > ValidadeDaConfirmacao;
 
     public void Confirmar(MetodoConfirmacao metodo)
     {

@@ -468,6 +468,65 @@ namespace Banco.Infra.Persistencia.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Banco.Infra.Idempotencia.ChaveIdempotente", b =>
+                {
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("usuario_id");
+
+                    b.Property<string>("Chave")
+                        .HasColumnType("text")
+                        .HasColumnName("chave");
+
+                    b.Property<DateTimeOffset>("CriadaEm")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("criada_em");
+
+                    b.Property<string>("Escopo")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("escopo");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("estado");
+
+                    b.Property<DateTimeOffset>("ExpiraEm")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expira_em");
+
+                    b.Property<byte[]>("RequestHash")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("request_hash");
+
+                    b.Property<string>("ResponseBody")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("response_body");
+
+                    b.Property<short?>("StatusCode")
+                        .HasColumnType("smallint")
+                        .HasColumnName("status_code");
+
+                    b.HasKey("UsuarioId", "Chave")
+                        .HasName("pk_idempotency_keys");
+
+                    b.HasIndex("ExpiraEm")
+                        .HasDatabaseName("ix_idem_expiracao");
+
+                    b.ToTable("idempotency_keys", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_idem_chave", "length(chave) BETWEEN 8 AND 255");
+
+                            t.HasCheckConstraint("ck_idem_estado", "estado IN ('PROCESSANDO', 'CONCLUIDA')");
+
+                            t.HasCheckConstraint("ck_idem_hash", "octet_length(request_hash) = 32");
+
+                            t.HasCheckConstraint("ck_idem_resposta", "(estado = 'CONCLUIDA') = (status_code IS NOT NULL)");
+                        });
+                });
+
             modelBuilder.Entity("Banco.Dominio.Chaves.ChaveTransferencia", b =>
                 {
                     b.HasOne("Banco.Dominio.Contas.Conta", null)
@@ -534,6 +593,16 @@ namespace Banco.Infra.Persistencia.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_refresh_tokens_usuarios_usuario_id");
+                });
+
+            modelBuilder.Entity("Banco.Infra.Idempotencia.ChaveIdempotente", b =>
+                {
+                    b.HasOne("Banco.Dominio.Usuarios.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_idempotency_keys_usuarios_usuario_id");
                 });
 #pragma warning restore 612, 618
         }

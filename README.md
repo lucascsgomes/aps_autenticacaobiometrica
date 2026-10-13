@@ -120,7 +120,12 @@ No Linux e no macOS, troque `.\.venv\Scripts\python.exe` por `.venv/bin/python` 
 | `GET /v1/contas/me/extrato` | Lançamentos com saldo após cada linha e a contraparte mascarada. Cursor opaco `(criado_em, id)` sobre o índice do ledger, sem `OFFSET`; filtros `limit` (1 a 100), `de`, `ate` (fuso `America/Sao_Paulo`) e `tipo` (`D` ou `C`) |
 | `GET /v1/chaves/{valor}` | Consulta de destino: devolve só o nome mascarado (`Maria S***`) e se a chave é própria. `422 INVALID_KEY_FORMAT` e `404 KEY_NOT_FOUND` |
 | `DELETE /v1/contas/me/chaves/{id}` | Apaga uma chave da própria conta. Chave alheia responde igual a chave inexistente |
+| `POST /v1/transferencias/intencoes` | Grava o que será confirmado (chave, valor, descrição), sem mover dinheiro. Checa destino, saldo e a própria conta, e devolve o resumo com o nome mascarado do destinatário. Vale 90 segundos, e uma intenção nova expira a anterior |
+| `POST /v1/transferencias/{id}/confirmar` | Confirma com a senha e exige `Idempotency-Key`. Retry com a mesma chave devolve a resposta original sem mover dinheiro de novo; a mesma chave em outra transferência dá `422` |
+| `GET /v1/transferencias/{id}` | Estado e histórico, para a tela de "status incerto" quando a resposta do confirmar se perde |
+| `GET /v1/transferencias/{id}/comprovante` | Comprovante com E2E ID e código de autenticação simulado, para quem enviou e para quem recebeu (que vê a origem mascarada e o próprio saldo) |
 
+- **Confirmação por senha**: senha errada gasta a intenção (`FALHA`) e conta para o bloqueio da conta. Senha certa de conta bloqueada recebe `403 ACCOUNT_LOCKED` e não move nada. A confirmação trava a linha da transferência, então confirmações simultâneas movem o dinheiro uma vez só (provado em teste).
 - **JWT** HS256 de 15 minutos, validado com emissor, audiência, expiração e algoritmo fixo (`alg=none` e assinatura adulterada são recusados em teste).
 - **Refresh token** opaco de 32 bytes; no banco fica só o SHA-256, e cada login abre uma família rotativa de 7 dias.
 - **Senha** com `PasswordHasher` do ASP.NET Identity, e comparação sempre executada para igualar o tempo de resposta.
@@ -134,7 +139,7 @@ A cada push e pull request, o GitHub Actions faz o build da solution (aviso vira
 
 ## Status
 
-Em construção, por ondas. Pronto até aqui: repositório e esteira de CI, solution .NET com primeira regra de domínio testada, API no ar com health checks, o autenticador facial transformado em microserviço HTTP com enroll e verify, o PostgreSQL com usuários, contas, transferências e ledger de partida dobrada (regras como constraints e triggers, provadas sob concorrência), e a API com cadastro, login por senha, JWT, refresh rotativo, extrato por cursor, chaves de transferência e rate limit. Próximo: transferência com confirmação, depois o reconhecimento facial.
+Em construção, por ondas. Pronto até aqui: repositório e esteira de CI, solution .NET com primeira regra de domínio testada, API no ar com health checks, o autenticador facial transformado em microserviço HTTP com enroll e verify, o PostgreSQL com usuários, contas, transferências e ledger de partida dobrada (regras como constraints e triggers, provadas sob concorrência), e a API com cadastro, login por senha, JWT, refresh rotativo, extrato por cursor, chaves de transferência, rate limit e transferência confirmada por senha com idempotência. Próximo: limites diurno e noturno, depois o reconhecimento facial.
 
 ## Limitações
 

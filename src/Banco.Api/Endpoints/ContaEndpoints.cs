@@ -50,14 +50,14 @@ internal static class ContaEndpoints
         }
 
         var chaves = (await banco.Chaves.Where(k => k.ContaId == conta.Conta.Id).OrderBy(k => k.CriadaEm).ToListAsync(cancelamento))
-            .Select(k => new ChaveDto(k.Id, Codigo(k.Tipo), Mascara.Chave(k.Tipo, k.Valor)))
+            .Select(k => new ChaveDto(k.Id, Codigo.De(k.Tipo), Mascara.Chave(k.Tipo, k.Valor)))
             .ToList();
 
         return Results.Ok(new ContaMeResponse(
             conta.Conta.Id,
             conta.Conta.Agencia,
             conta.Conta.Numero,
-            conta.Conta.Status.ToString().ToUpperInvariant(),
+            Codigo.De(conta.Conta.Status),
             conta.Conta.SaldoCentavos,
             new TitularDto(conta.Nome),
             chaves));
@@ -160,7 +160,7 @@ internal static class ContaEndpoints
             x.L.SaldoAposCentavos,
             new ContraparteDto(x.Nome is null ? Instituicao : Mascara.Nome(x.Nome), Mascara.Conta(x.Conta.Numero)),
             x.T.Descricao,
-            x.T.Status.ToString().ToUpperInvariant(),
+            Codigo.De(x.T.Status),
             x.L.CriadoEm)).ToList();
 
         var proximo = haMais ? EscreverCursor(pagina[^1].L.CriadoEm, pagina[^1].L.Id) : null;
@@ -181,7 +181,7 @@ internal static class ContaEndpoints
             .Join(banco.Usuarios, uid => uid, u => u.Id, (uid, u) => new { u.Id, u.Nome })
             .SingleOrDefaultAsync(cancelamento) ?? throw new ChaveNaoEncontradaException();
 
-        return Results.Ok(new ConsultaChaveResponse(Codigo(tipo), Mascara.Chave(tipo, valor), Mascara.Nome(achada.Nome), Instituicao, achada.Id == usuarioId));
+        return Results.Ok(new ConsultaChaveResponse(Codigo.De(tipo), Mascara.Chave(tipo, valor), Mascara.Nome(achada.Nome), Instituicao, achada.Id == usuarioId));
     }
 
     private static async Task<IResult> ApagarChave(Guid id, ClaimsPrincipal usuario, BancoDbContext banco, CancellationToken cancelamento)
@@ -197,8 +197,6 @@ internal static class ContaEndpoints
             .ExecuteDeleteAsync(cancelamento);
         return apagadas == 0 ? throw new ChaveNaoEncontradaException() : Results.NoContent();
     }
-
-    private static string Codigo(TipoChave tipo) => tipo.ToString().ToUpperInvariant();
 
     private static DateOnly? LerData(string? texto, string campo, Dictionary<string, string[]> erros)
     {

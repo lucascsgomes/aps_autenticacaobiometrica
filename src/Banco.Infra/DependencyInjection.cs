@@ -1,5 +1,6 @@
 using Banco.Infra.Autenticacao;
 using Banco.Infra.Cadastro;
+using Banco.Infra.Idempotencia;
 using Banco.Infra.Persistencia;
 using Banco.Infra.Transferencias;
 using Microsoft.EntityFrameworkCore;
@@ -28,6 +29,8 @@ public static class DependencyInjection
         servicos.AddScoped<RefreshTokenServico>();
         servicos.AddScoped<ServicoDeAutenticacao>();
         servicos.AddScoped<ServicoDeCadastro>();
+        servicos.AddScoped<ServicoDeTransferencia>();
+        servicos.AddScoped<ServicoDeIdempotencia>();
 
         return servicos;
     }

@@ -13,6 +13,7 @@ internal static class Limites
     public const string Biometria = "biometria";
     public const string ConsultaChave = "consulta-chave";
     public const string Leitura = "leitura";
+    public const string Transferencia = "transferencia";
 
     private static readonly TimeSpan Janela = TimeSpan.FromMinutes(1);
 
@@ -29,6 +30,7 @@ internal static class Limites
             o.AddPolicy(Publico, c => PorIp(c, 20 * fator));
             o.AddPolicy(Biometria, c => PorIp(c, 5 * fator));
             o.AddPolicy(ConsultaChave, c => PorUsuario(c, 10 * fator));
+            o.AddPolicy(Transferencia, c => PorUsuario(c, 10 * fator));
             o.AddPolicy(Leitura, c => PorUsuario(c, 120 * fator));
             o.OnRejected = async (contexto, ct) =>
             {

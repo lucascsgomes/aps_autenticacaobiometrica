@@ -13,8 +13,13 @@ internal sealed partial class TratadorGlobalDeExcecoes(
 {
     public async ValueTask<bool> TryHandleAsync(HttpContext contexto, Exception excecao, CancellationToken ct)
     {
+        if (excecao is ContaBloqueadaException bloqueada)
+        {
+            contexto.Response.Headers.RetryAfter = Math.Ceiling(bloqueada.TentarEm.TotalSeconds).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
         var problema = excecao is NegocioException negocio
-            ? ProblemaDeNegocio(negocio, contexto)
+            ? MontarProblema(negocio)
             : ProblemaInterno(excecao, contexto);
         problema.Extensions["traceId"] = contexto.TraceIdentifier;
 
@@ -27,7 +32,8 @@ internal sealed partial class TratadorGlobalDeExcecoes(
         });
     }
 
-    private static ProblemDetails ProblemaDeNegocio(NegocioException negocio, HttpContext contexto)
+    /// <summary>Monta o Problem Details de uma falha de negócio. Público na API porque a idempotência guarda e repete a mesma resposta.</summary>
+    internal static ProblemDetails MontarProblema(NegocioException negocio)
     {
         var (status, titulo) = negocio switch
         {
@@ -35,15 +41,17 @@ internal sealed partial class TratadorGlobalDeExcecoes(
             CredenciaisInvalidasException => (StatusCodes.Status401Unauthorized, "Credenciais inválidas"),
             ContaBloqueadaException => (StatusCodes.Status403Forbidden, "Conta bloqueada"),
             NaoAutenticadoException => (StatusCodes.Status401Unauthorized, "Não autenticado"),
+            TransferenciaNaoEncontradaException => (StatusCodes.Status404NotFound, "Transferência não encontrada"),
+            MesmaContaException or DestinoIndisponivelException or SaldoInsuficienteException or ChaveDeIdempotenciaReusadaException
+                => (StatusCodes.Status422UnprocessableEntity, "Transferência recusada"),
+            SenhaNaoVerificadaException => (StatusCodes.Status401Unauthorized, "Senha não confere"),
+            TransferenciaNaoPendenteException or TransferenciaExpiradaException or RequisicaoEmAndamentoException
+                => (StatusCodes.Status409Conflict, "Transferência não pode ser confirmada"),
+            ChaveDeIdempotenciaObrigatoriaException => (StatusCodes.Status400BadRequest, "Idempotency-Key obrigatória"),
             ChaveNaoEncontradaException => (StatusCodes.Status404NotFound, "Chave não encontrada"),
             ChaveInvalidaException => (StatusCodes.Status422UnprocessableEntity, "Chave inválida"),
             _ => (StatusCodes.Status400BadRequest, "Requisição inválida"),
         };
-
-        if (negocio is ContaBloqueadaException bloqueada)
-        {
-            contexto.Response.Headers.RetryAfter = Math.Ceiling(bloqueada.TentarEm.TotalSeconds).ToString(System.Globalization.CultureInfo.InvariantCulture);
-        }
 
         var problema = new ProblemDetails { Status = status, Title = titulo, Detail = negocio.Message, Type = $"https://httpstatuses.com/{status}" };
         problema.Extensions["code"] = negocio.Code;
