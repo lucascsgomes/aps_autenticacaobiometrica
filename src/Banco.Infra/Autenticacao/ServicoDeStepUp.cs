@@ -58,6 +58,18 @@ public sealed class ServicoDeStepUp(
             confere = senhas.Verificar(usuario.SenhaHash, senha ?? "");
         }
 
+        await ConcluirAsync(usuario, confere, comRosto, cancelamento);
+    }
+
+    /// <summary>Confirmação só por senha, sem desafio: para a exclusão do rosto. Conta para o bloqueio como as demais.</summary>
+    public async Task ConfirmarSenhaAsync(Guid usuarioId, string senha, CancellationToken cancelamento = default)
+    {
+        var usuario = await banco.Usuarios.SingleAsync(u => u.Id == usuarioId && u.Status == StatusUsuario.Ativo, cancelamento);
+        await ConcluirAsync(usuario, senhas.Verificar(usuario.SenhaHash, senha), false, cancelamento);
+    }
+
+    private async Task ConcluirAsync(Usuario usuario, bool confere, bool comRosto, CancellationToken cancelamento)
+    {
         var agora = relogio.GetUtcNow();
         if (!confere)
         {

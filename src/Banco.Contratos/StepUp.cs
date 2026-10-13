@@ -2,7 +2,13 @@ using System.Text.Json;
 
 namespace Banco.Contratos;
 
-/// <summary><c>finalidade</c> é ALTERAR_LIMITE ou NOVA_CHAVE; <c>parametros</c> tem a mesma forma do pedido que o desafio vai confirmar.</summary>
+public sealed record BiometriaResponse(bool Cadastrada, DateTimeOffset? CadastradaEm, string? Modelo);
+
+public sealed record TrocarSenhaRequest(string? NovaSenha);
+
+public sealed record ConfirmarSenhaRequest(string? Senha);
+
+/// <summary><c>finalidade</c> é ALTERAR_LIMITE, NOVA_CHAVE, TROCAR_SENHA ou RECADASTRO (estas duas sem parâmetros); <c>parametros</c> tem a mesma forma do pedido que o desafio vai confirmar.</summary>
 public sealed record DesafioDeAcaoRequest(string? Finalidade, JsonElement? Parametros);
 
 public sealed record DesafioDeAcaoResponse(Guid DesafioId, string Finalidade, DateTimeOffset ExpiraEm, string Instrucao);

@@ -118,6 +118,13 @@ public sealed partial class Usuario
         AtualizadoEm = agora;
     }
 
+    public void TrocarSenha(string senhaHash, DateTimeOffset agora)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(senhaHash);
+        SenhaHash = senhaHash;
+        AtualizadoEm = agora;
+    }
+
     public bool EstaBloqueado(DateTimeOffset agora) => BloqueadoAte > agora;
 
     /// <summary>A 5ª falha seguida bloqueia por 1 minuto; a partir daí o tempo dobra (2, 4, 8) até o teto de 15 minutos.</summary>

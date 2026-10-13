@@ -106,6 +106,13 @@ internal static partial class Validacao
         }
     }
 
+    public static Dictionary<string, string[]> NovaSenha(string? senha)
+    {
+        var erros = new Dictionary<string, string[]>();
+        ValidarSenha(senha, erros);
+        return erros.ToDictionary(e => "nova_senha", e => e.Value);
+    }
+
     private static void ValidarSenha(string? senha, Dictionary<string, string[]> erros)
     {
         if (senha is null || senha.Length < SenhaMinima)

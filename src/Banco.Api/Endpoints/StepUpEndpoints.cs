@@ -53,8 +53,14 @@ internal static class StepUpEndpoints
                 var chave = Ler<NovaChaveRequest>(parametros, opcoes);
                 (finalidade, instrucao, canonico, erros) = (FinalidadeDoDesafio.NovaChave, "Confirme com o rosto ou com a senha a nova chave.", AcoesSensiveis.Canonico(chave), AcoesSensiveis.ErrosDeChave(chave, out _));
                 break;
+            case "TROCAR_SENHA":
+                (finalidade, instrucao, canonico, erros) = (FinalidadeDoDesafio.TrocarSenha, "Confirme com o rosto ou com a senha atual a troca de senha.", AcoesSensiveis.SemParametros, []);
+                break;
+            case "RECADASTRO":
+                (finalidade, instrucao, canonico, erros) = (FinalidadeDoDesafio.Recadastro, "Confirme com o rosto atual ou com a senha a troca do rosto.", AcoesSensiveis.SemParametros, []);
+                break;
             default:
-                return Validacao.Problema(new Dictionary<string, string[]> { ["finalidade"] = ["Use ALTERAR_LIMITE ou NOVA_CHAVE, com os parametros do pedido."] });
+                return Validacao.Problema(new Dictionary<string, string[]> { ["finalidade"] = ["Use ALTERAR_LIMITE, NOVA_CHAVE, TROCAR_SENHA ou RECADASTRO."] });
         }
 
         if (erros.Count > 0)
@@ -111,6 +117,9 @@ internal static class StepUpEndpoints
 /// <summary>Validação e forma canônica dos parâmetros das ações sensíveis: a mesma função serve ao desafio e à ação, então o hash coincide.</summary>
 internal static class AcoesSensiveis
 {
+    /// <summary>Forma canônica das ações que não levam parâmetros: o desafio fica amarrado só ao usuário e à finalidade.</summary>
+    public const string SemParametros = "{}";
+
     public static Dictionary<string, string[]> ErrosDeLimites(LimitesRequest? corpo, out TimeOnly? inicio)
     {
         var erros = new Dictionary<string, string[]>();

@@ -48,6 +48,7 @@ app.MapearSaude();
 app.MapearAuth();
 app.MapearContas();
 app.MapearStepUp();
+app.MapearCredenciais();
 app.MapearTransferencias();
 
 app.Run();

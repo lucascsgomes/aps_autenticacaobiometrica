@@ -62,6 +62,12 @@ public sealed class RefreshTokenServico(BancoDbContext banco, TimeProvider relog
         }
     }
 
+    /// <summary>Encerra todas as sessões do usuário (troca de senha ou de rosto). Os access tokens já emitidos valem até vencer.</summary>
+    public Task<int> RevogarTodasAsync(Guid usuarioId, CancellationToken cancelamento = default) =>
+        banco.RefreshTokens
+            .Where(t => t.UsuarioId == usuarioId && t.RevogadoEm == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevogadoEm, relogio.GetUtcNow()), cancelamento);
+
     private Task<int> RevogarFamiliaAsync(Guid familiaId, DateTimeOffset agora, CancellationToken cancelamento) =>
         banco.RefreshTokens
             .Where(t => t.FamiliaId == familiaId && t.RevogadoEm == null)

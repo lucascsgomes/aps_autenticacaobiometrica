@@ -11,9 +11,9 @@ internal static class Imagens
     public static async Task<IFormCollection> LerFormularioAsync(HttpRequest requisicao, CancellationToken cancelamento) =>
         requisicao.HasFormContentType ? await requisicao.ReadFormAsync(cancelamento) : throw new ImagemInvalidaException();
 
-    public static byte[] LerImagem(IFormCollection formulario)
+    public static byte[] LerImagem(IFormCollection formulario, string campo = "image")
     {
-        if (formulario.Files.GetFile("image") is not { Length: > 0 } arquivo)
+        if (formulario.Files.GetFile(campo) is not { Length: > 0 } arquivo)
         {
             throw new ImagemInvalidaException();
         }

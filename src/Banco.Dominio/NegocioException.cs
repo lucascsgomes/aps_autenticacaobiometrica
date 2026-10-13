@@ -58,6 +58,8 @@ public sealed class ChaveJaExisteException() : NegocioException("KEY_ALREADY_EXI
 
 public sealed class LimiteDeChavesException() : NegocioException("KEY_LIMIT_REACHED", "A conta já tem o máximo de 5 chaves.");
 
+public sealed class BiometriaNaoCadastradaException() : NegocioException("BIOMETRIA_NOT_REGISTERED", "Esta conta não tem rosto cadastrado.");
+
 public sealed class RostoNaoDetectadoException() : NegocioException("NO_FACE_DETECTED", "Não encontramos um rosto na foto. Enquadre o rosto e tente de novo.");
 
 public sealed class VariosRostosException() : NegocioException("MULTIPLE_FACES", "Há mais de um rosto na foto. Fique sozinho no enquadramento.");

@@ -219,7 +219,7 @@ public class StepUpTests : IClassFixture<FaceEnrollTests.SemAtalho>
     }
 
     [Theory]
-    [InlineData("""{"finalidade":"TROCAR_SENHA","parametros":{}}""", "finalidade")]
+    [InlineData("""{"finalidade":"NOVO_FAVORECIDO","parametros":{}}""", "finalidade")]
     [InlineData("""{"finalidade":"ALTERAR_LIMITE"}""", "corpo")]
     [InlineData("""{"finalidade":"ALTERAR_LIMITE","parametros":{"inicio_noturno":"21:00"}}""", "inicio_noturno")]
     [InlineData("""{"finalidade":"NOVA_CHAVE","parametros":{"tipo":"CPF","valor":"52998224725"}}""", "tipo")]
