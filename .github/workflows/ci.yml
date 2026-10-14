@@ -84,3 +84,23 @@ jobs:
           done
           docker logs face
           exit 1
+
+  api-imagem:
+    name: API (imagem Docker)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Valida o Dockerfile da API, que o ambiente local não consegue testar.
+      - name: Build da imagem
+        run: docker build -f src/Banco.Api/Dockerfile -t banco-api:ci .
+
+      - name: Sobe a imagem e confere /health
+        run: |
+          docker run -d --name api -p 8080:8080 -e Jwt__Chave=chave-de-ci-com-mais-de-trinta-e-dois-bytes-123456 banco-api:ci
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:8080/health && exit 0
+            sleep 1
+          done
+          docker logs api
+          exit 1

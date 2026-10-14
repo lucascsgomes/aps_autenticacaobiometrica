@@ -1,0 +1,58 @@
+name: Publicar interface web
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - src/Banco.Web/**
+      - src/Banco.Web.Compartilhado/**
+      - src/Banco.Contratos/**
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Publica o Blazor WebAssembly
+        run: dotnet publish src/Banco.Web --configuration Release --output out
+
+      - name: Ajusta para o GitHub Pages
+        env:
+          API_URL: ${{ vars.API_URL }}
+        run: |
+          test -n "$API_URL" || { echo "Defina a variável API_URL do repositório (URL da API no Render)."; exit 1; }
+          cd out/wwwroot
+          # O site fica em /<nome-do-repositorio>/, não na raiz.
+          sed -i 's|<base href="/" />|<base href="/${{ github.event.repository.name }}/" />|' index.html
+          printf '{ "ApiBaseUrl": "%s" }\n' "$API_URL" > appsettings.json
+          # Link direto para /entrar, /perfil etc.: o Pages devolve o 404.html, que é o próprio app.
+          cp index.html 404.html
+          touch .nojekyll
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out/wwwroot
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

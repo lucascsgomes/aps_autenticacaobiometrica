@@ -1,0 +1,22 @@
+# Blueprint do Render para a API. Os valores marcados com sync: false são pedidos na criação e nunca ficam no repositório.
+services:
+  - type: web
+    name: banco-api
+    runtime: docker
+    dockerfilePath: ./src/Banco.Api/Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: ConnectionStrings__Banco # connection string do Neon (com SSL Mode=Require)
+        sync: false
+      - key: Jwt__Chave # sorteada pelo Render, mínimo de 32 caracteres
+        generateValue: true
+      - key: Biometria__ChaveCifra # 32 bytes em base64; perdeu a chave, perdeu os rostos cadastrados
+        sync: false
+      - key: Face__BaseUrl # URL do Space do face-service, sem barra no fim
+        sync: false
+      - key: Face__ChaveInterna # a mesma FACE_INTERNAL_KEY configurada no Space
+        sync: false
+      - key: Cors__Origens__0 # origem da interface web (GitHub Pages), sem barra no fim
+        value: https://lucascsgomes.github.io

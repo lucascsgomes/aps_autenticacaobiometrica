@@ -1,0 +1,11 @@
+**/bin
+**/obj
+**/.vs
+.git
+.github
+docs
+tests
+face-service
+aps_bankapp
+src/Banco.Web
+src/Banco.Web.Compartilhado

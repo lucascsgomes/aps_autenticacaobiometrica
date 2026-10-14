@@ -180,9 +180,24 @@ No Linux e no macOS, troque `.\.venv\Scripts\python.exe` por `.venv/bin/python` 
 - **Rate limit** (janela de 1 minuto, `429` com `Retry-After` e `code=RATE_LIMITED`): `login/senha` 5 por IP, `register`, `refresh` e `logout` 20 por IP, consulta de chave 10 e leituras 120 por usuário. `RateLimit:Fator` multiplica os limites (os testes usam 1000). Atrás de proxy, como no Render, defina `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`, senão todos os clientes chegam com o IP do proxy e dividem o mesmo limite.
 - **Erros** em Problem Details (RFC 9457) com um `code` estável (`INVALID_CREDENTIALS`, `ACCOUNT_LOCKED`, `REGISTRATION_CONFLICT`...).
 
+## Publicação (link fixo)
+
+Três peças, todas em plano gratuito: o `face-service` no Hugging Face, a API no Render e a interface no GitHub Pages. O banco é o Neon, que já está na nuvem. A ordem importa, porque cada passo precisa do endereço do anterior.
+
+1. **face-service (Hugging Face Space).**
+   - Crie um Space com SDK **Docker**, público, em branco (por exemplo `face-service`).
+   - Em *Settings > Variables and secrets* do Space, crie o secret `FACE_INTERNAL_KEY` com um texto longo qualquer.
+   - Em *Settings > Access Tokens* do seu perfil, crie um token com permissão de escrita.
+   - No GitHub, em *Settings > Secrets and variables > Actions*, crie o secret `HF_TOKEN` (o token) e a variável `HF_SPACE` (`usuario/face-service`).
+   - Em *Actions*, rode "Publicar face-service no Hugging Face". O Space compila a imagem (baixa os modelos) e fica em `https://<usuario>-face-service.hf.space`; `/internal/v1/ready` deve responder `200`.
+2. **API (Render).** *New > Blueprint*, escolha este repositório (usa o `render.yaml`) e preencha os valores pedidos: `ConnectionStrings__Banco` (a connection string do Neon), `Biometria__ChaveCifra` (32 bytes em base64; `dotnet user-secrets list --project src/Banco.Api` mostra a do seu computador, use a mesma para manter os rostos já cadastrados), `Face__BaseUrl` (a URL do Space, sem barra no fim) e `Face__ChaveInterna` (o mesmo texto do `FACE_INTERNAL_KEY`). `Jwt__Chave` o Render sorteia. Anote a URL da API (`https://banco-api.onrender.com` ou parecida) e confira `/ready`.
+3. **Interface (GitHub Pages).** Em *Settings > Pages*, escolha *Source: GitHub Actions*. Crie a variável `API_URL` com a URL da API e rode "Publicar interface web". O site fica em `https://<usuario>.github.io/aps_autenticacaobiometrica/`. A origem do Pages já está liberada no CORS da API (`Cors__Origens__0` no `render.yaml`).
+
+Os planos gratuitos dormem sem uso (o Render em 15 minutos, o Space depois de alguns dias) e a primeira chamada leva cerca de um minuto para acordar: abra `/health` da API e `/internal/v1/health` do Space antes da apresentação. Em produção o atalho `Auth:CadastroSemRosto` é ignorado, então todo cadastro termina com a foto.
+
 ## Integração contínua
 
-A cada push e pull request, o GitHub Actions faz o build da solution (aviso vira erro), roda os testes da API, o `ruff` e o `pytest` do `face-service`, e constrói a imagem Docker do serviço para conferir `/ready` com os modelos reais. O Dependabot sugere atualização semanal de NuGet, pip e Actions.
+A cada push e pull request, o GitHub Actions faz o build da solution (aviso vira erro), roda os testes da API, o `ruff` e o `pytest` do `face-service`, e constrói as imagens Docker do serviço facial (confere `/ready` com os modelos reais) e da API (confere `/health`). O Dependabot sugere atualização semanal de NuGet, pip e Actions.
 
 ## Status
 
