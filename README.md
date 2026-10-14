@@ -188,6 +188,29 @@ A cada push e pull request, o GitHub Actions faz o build da solution (aviso vira
 
 Em construção, por ondas. Pronto até aqui: repositório e esteira de CI, solution .NET com primeira regra de domínio testada, API no ar com health checks, o autenticador facial transformado em microserviço HTTP com enroll e verify, o PostgreSQL com usuários, contas, transferências e ledger de partida dobrada (regras como constraints e triggers, provadas sob concorrência), e a API com cadastro, login por senha, JWT, refresh rotativo, extrato por cursor, chaves de transferência, rate limit, transferência confirmada por senha com idempotência, limites diurno e noturno, o rosto no cadastro, a retomada do cadastro, o login por rosto e a confirmação da transferência com o rosto. a confirmação por rosto ou senha para aumentar limite e criar chave. Também prontos: a troca de senha e a troca ou exclusão do rosto. A interface web já cadastra com a foto, entra com senha ou rosto e mostra saldo, extrato, transferência e a tela de perfil. Próximo: testar com um rosto de verdade e calibrar os limiares, depois o app de celular. Favorecidos ficam para depois.
 
+## Roteiro da apresentação
+
+Com a API, o `face-service` e a interface web no ar (seção "Como rodar") e `Auth:CadastroSemRosto` em `false`:
+
+1. **Cadastro com o rosto:** em `/cadastro`, preencha os dados, aceite o termo e tire a foto. A conta nasce com R$ 5.000 fictícios.
+2. **Login por rosto:** saia, e em `/entrar` informe o CPF e toque em "Entrar com o rosto". Mostre que a senha também funciona.
+3. **Transferência com rosto:** em `/transferir`, envie para a chave de outra conta e confirme com o rosto. O comprovante mostra "Confirmada com o rosto".
+4. **O que a biometria protege:** com um rosto diferente (ou de costas), a confirmação é recusada e a transferência é cancelada. Em `/perfil`, aumentar o limite ou criar uma chave pede o rosto ou a senha.
+5. **Gestão do rosto:** em `/perfil`, trocar e excluir o rosto (LGPD), e trocar a senha.
+
+## Verificação com fotos reais
+
+O `face-service` real (YuNet + SFace) foi rodado contra fotos públicas de exemplo do repositório `face_recognition` (as fotos não ficam neste repositório). Cadastrada uma foto de uma pessoa, a comparação com outras fotos deu:
+
+| Foto comparada | Score | Limiar de login (0,363) | Limiar de transferência (0,450) |
+|---|---|---|---|
+| a mesma foto | 1,000 | aceita | aceita |
+| mesma pessoa, outra foto | 0,668 | aceita | aceita |
+| mesma pessoa, foto menor | 0,947 | aceita | aceita |
+| outra pessoa | 0,041 | recusa | recusa |
+
+É uma amostra pequena (uma pessoa, três fotos, uma outra pessoa), com fotos boas. Com webcam, luz ruim e ângulo ruim os scores caem, então os limiares ainda precisam ser conferidos com as pessoas que vão usar o sistema.
+
 ## Limitações
 
 - Dinheiro fictício, sem integração com Pix ou banco real.

@@ -3,7 +3,7 @@
 @inject SessaoApp Sessao
 @inject NavigationManager Navegacao
 
-<section class="cartao estreito">
+<section class="cartao estreito compacto">
     <h1>Abrir conta</h1>
 
     @if (_cadastroToken is null)
@@ -28,7 +28,7 @@
                 </label>
                 <label class="marcar">
                     <input type="checkbox" @bind="_aceito" />
-                    <span>Autorizo o uso do meu rosto para entrar na conta e confirmar transferências. A foto não é guardada, só uma representação numérica cifrada, que posso apagar quando quiser (LGPD, art. 11).</span>
+                    <span>Autorizo o uso do meu rosto para entrar na conta e confirmar transferências.</span>
                 </label>
                 @if (_erro is not null)
                 {
@@ -48,10 +48,10 @@
             <p>Informe o CPF e a senha do cadastro que ficou pela metade.</p>
             <form @onsubmit="RetomarAsync" @onsubmit:preventDefault>
                 <label>CPF
-                    <input @bind="_cpf" inputmode="numeric" maxlength="14" />
+                <input @bind="_cpf" inputmode="numeric" maxlength="14" />
                 </label>
                 <label>Senha
-                    <input @bind="_senha" type="password" autocomplete="current-password" />
+                <input @bind="_senha" type="password" autocomplete="current-password" />
                 </label>
                 @if (_erro is not null)
                 {

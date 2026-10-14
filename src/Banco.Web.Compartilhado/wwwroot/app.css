@@ -52,7 +52,7 @@ a { color: var(--marca); }
 .topo nav { display: flex; gap: 16px; align-items: center; }
 .marca { font-weight: 700; text-decoration: none; color: var(--marca); }
 
-main { max-width: 640px; margin: 0 auto; padding: 16px; }
+main { max-width: 640px; margin: 0 auto; padding: 12px 16px; }
 
 .cartao {
     background: var(--superficie);
@@ -103,14 +103,14 @@ button.link { background: none; color: var(--marca); padding: 0; text-decoration
 
 .acoes { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
 .rodape-cartao { margin: 16px 0 0; font-size: 0.9rem; color: var(--suave); }
-.rodape { text-align: center; color: var(--suave); font-size: 0.8rem; padding: 16px; }
+.rodape { text-align: center; color: var(--suave); font-size: 0.8rem; padding: 8px 16px; }
 
 .aviso { padding: 10px 12px; border-radius: 8px; margin: 8px 0; }
 .aviso.erro { background: var(--erro-fundo); color: var(--erro); }
 .vazio { color: var(--suave); text-align: center; padding: 16px 0; }
 
 .camera { margin: 12px 0; }
-.camera video { width: 100%; max-height: 360px; background: #000; border-radius: 12px; transform: scaleX(-1); }
+.camera video { width: 100%; height: min(280px, 40vh); object-fit: cover; background: #000; border-radius: 12px; transform: scaleX(-1); }
 
 .saldo .valor { font-size: 2rem; font-weight: 700; margin: 4px 0; }
 .rotulo { color: var(--suave); margin: 0; font-size: 0.9rem; }
@@ -139,3 +139,14 @@ button.link { background: none; color: var(--marca); padding: 0; text-decoration
 .dados .codigo { font-family: ui-monospace, monospace; font-size: 0.8rem; font-weight: 400; }
 
 .confirmacao { border-top: 1px solid var(--linha); margin-top: 12px; padding-top: 12px; }
+
+
+h1[tabindex="-1"]:focus { outline: none; }
+
+/* Formulário longo (cadastro): campos mais baixos para caber sem rolagem */
+.compacto { padding: 16px 20px; margin-bottom: 8px; }
+.compacto h1 { font-size: 1.3rem; margin-bottom: 10px; }
+.compacto label { margin-bottom: 8px; font-size: 0.85rem; }
+.compacto input:not([type="checkbox"]) { margin-top: 2px; padding: 6px 10px; }
+.compacto .acoes { margin-top: 4px; }
+.compacto .rodape-cartao { margin-top: 10px; }
