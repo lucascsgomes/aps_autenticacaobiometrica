@@ -17,7 +17,7 @@ jobs:
     name: API (.NET)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -49,7 +49,7 @@ jobs:
       run:
         working-directory: face-service
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
@@ -69,7 +69,7 @@ jobs:
     name: face-service (imagem Docker)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Valida o Dockerfile e o download dos modelos, que o ambiente local não consegue testar.
       - name: Build da imagem
@@ -89,7 +89,7 @@ jobs:
     name: API (imagem Docker)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Valida o Dockerfile da API, que o ambiente local não consegue testar.
       - name: Build da imagem
