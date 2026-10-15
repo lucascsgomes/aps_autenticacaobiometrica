@@ -20,7 +20,8 @@ COPY processamento processamento
 COPY visualizacao visualizacao
 COPY config.py erros.py ./
 
-RUN useradd --create-home --uid 10001 servico
+# Alguns construtores (o do Render) criam modelos/ só para o root; o usuário sem privilégio precisa ler tudo em /app.
+RUN chmod -R a+rX /app && useradd --create-home --uid 10001 servico
 USER servico
 
 EXPOSE 7860
