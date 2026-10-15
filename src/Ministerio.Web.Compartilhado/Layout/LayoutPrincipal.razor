@@ -5,7 +5,10 @@
 @inject NavigationManager Navegacao
 
 <header class="topo">
-    <a class="marca" href="">Acesso Biométrico</a>
+    <a class="marca" href="">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="15" fill="rgb(255 255 255 / 0.18)"/><path d="M8 22c0-8 6-13 16-13 0 9-5 15-12 15-2 0-4-1-4-2Z" fill="#fff"/><path d="M9 24c4-5 8-8 12-10" stroke="#1f6b3a" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
+        <span>Acesso Biométrico<small>Ministério do Meio Ambiente</small></span>
+    </a>
     @if (Sessao.Ativa)
     {
         <nav>

@@ -40,56 +40,96 @@ else if (_dados is null)
 }
 else
 {
-    <p class="rotulo">@_dados.Itens.Count registros. As informações somem da tela quando você sair desta página.</p>
-    <div class="tabela">
-        <table>
-            <thead>
-                <tr>
-                    <th>Município</th>
-                    <th>UF</th>
-                    <th>Produto</th>
-                    <th>Ano</th>
-                    @if (Nivel >= 2)
-                    {
-                        <th>Propriedade</th>
-                        <th class="num">Litros</th>
-                        <th class="num">Hectares</th>
-                    }
-                    @if (Nivel >= 3)
-                    {
-                        <th>Proprietário</th>
-                        <th>Documento</th>
-                        <th class="num">Multa</th>
-                        <th>Situação</th>
-                    }
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var p in _dados.Itens)
+    var itens = Filtrados().ToList();
+    <div class="resumo">
+        <div class="c-agua"><strong>@_dados.Itens.Count</strong><span>propriedades na base</span></div>
+        <div class="c-folha"><strong>@_dados.Itens.Select(p => p.Uf).Distinct().Count()</strong><span>estados</span></div>
+        <div class="c-folha"><strong>@_dados.Itens.Select(p => p.Agrotoxico).Distinct().Count()</strong><span>produtos proibidos</span></div>
+        @if (Nivel >= 2)
+        {
+            <div class="c-terra"><strong>@_dados.Itens.Sum(p => p.QuantidadeLitros ?? 0).ToString("N0", Invariante) L</strong><span>aplicados</span></div>
+            <div class="c-terra"><strong>@_dados.Itens.Sum(p => p.AreaHectares ?? 0).ToString("N0", Invariante) ha</strong><span>de área</span></div>
+        }
+        @if (Nivel >= 3)
+        {
+            <div class="c-erro"><strong>@Formato.Reais(_dados.Itens.Sum(p => p.MultaCentavos ?? 0))</strong><span>em multas</span></div>
+        }
+    </div>
+
+    <div class="filtros">
+        <label>Buscar
+            <input @bind="_busca" @bind:event="oninput" placeholder="@Dica" autocomplete="off" />
+        </label>
+        <label>Estado
+            <select @bind="_uf">
+                <option value="">Todos</option>
+                @foreach (var uf in _dados.Itens.Select(p => p.Uf).Distinct().Order())
                 {
+                    <option value="@uf">@uf</option>
+                }
+            </select>
+        </label>
+    </div>
+
+    <div class="painel-tabela">
+        <div class="tabela">
+            <table>
+                <thead>
                     <tr>
-                        <td>@p.Municipio</td>
-                        <td>@p.Uf</td>
-                        <td>@p.Agrotoxico</td>
-                        <td>@p.Ano</td>
+                        <th>Município</th>
+                        <th>UF</th>
+                        <th>Produto</th>
+                        <th>Ano</th>
                         @if (Nivel >= 2)
                         {
-                            <td>@p.Propriedade</td>
-                            <td class="num">@p.QuantidadeLitros?.ToString("N2", Invariante)</td>
-                            <td class="num">@p.AreaHectares?.ToString("N2", Invariante)</td>
+                            <th class="restrito">Propriedade</th>
+                            <th class="restrito num">Litros</th>
+                            <th class="restrito num">Hectares</th>
                         }
                         @if (Nivel >= 3)
                         {
-                            <td>@p.Proprietario</td>
-                            <td>@p.Documento</td>
-                            <td class="num">@(p.MultaCentavos is { } m ? Formato.Reais(m) : "")</td>
-                            <td>@p.Situacao</td>
+                            <th class="restrito">Proprietário</th>
+                            <th class="restrito">Documento</th>
+                            <th class="restrito num">Multa</th>
+                            <th class="restrito">Situação</th>
                         }
                     </tr>
-                }
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    @foreach (var p in itens)
+                    {
+                        <tr>
+                            <td>@p.Municipio</td>
+                            <td><span class="selo neutro">@p.Uf</span></td>
+                            <td>@p.Agrotoxico</td>
+                            <td>@p.Ano</td>
+                            @if (Nivel >= 2)
+                            {
+                                <td>@p.Propriedade</td>
+                                <td class="num">@p.QuantidadeLitros?.ToString("N2", Invariante)</td>
+                                <td class="num">@p.AreaHectares?.ToString("N2", Invariante)</td>
+                            }
+                            @if (Nivel >= 3)
+                            {
+                                <td>@p.Proprietario</td>
+                                <td>@p.Documento</td>
+                                <td class="num">@(p.MultaCentavos is { } m ? Formato.Reais(m) : "")</td>
+                                <td><span class="selo @ClasseDaSituacao(p.Situacao)">@p.Situacao</span></td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="rodape-tabela">
+            @(itens.Count == _dados.Itens.Count ? $"{itens.Count} registros." : $"{itens.Count} de {_dados.Itens.Count} registros.")
+            Colunas em marrom são restritas a este nível. As informações somem da tela quando você sair desta página.
+        </div>
     </div>
+    @if (itens.Count == 0)
+    {
+        <p class="vazio">Nenhum registro com esse filtro.</p>
+    }
     <div class="acoes">
         <a class="botao secundario" href="">Fechar e voltar</a>
     </div>
@@ -102,6 +142,28 @@ else
     public int Nivel { get; set; }
 
     private DadosResponse? _dados;
+    private string Dica => "Município, produto" + (Nivel >= 2 ? ", propriedade" : "") + (Nivel >= 3 ? ", proprietário" : "");
+    private string _busca = "";
+    private string _uf = "";
+
+    private IEnumerable<PropriedadeDto> Filtrados()
+    {
+        var b = _busca.Trim();
+        return _dados!.Itens.Where(p =>
+            (_uf == "" || p.Uf == _uf) &&
+            (b == "" || new[] { p.Municipio, p.Agrotoxico, p.Propriedade, p.Proprietario }
+                .Any(t => t?.Contains(b, StringComparison.CurrentCultureIgnoreCase) == true)));
+    }
+
+    private static string ClasseDaSituacao(string? situacao) => situacao switch
+    {
+        "Multa paga" => "",
+        "Em recurso" => "alerta",
+        "Processo no MPF" => "erro",
+        "Autuado" => "erro",
+        _ => "neutro",
+    };
+
     private string? _erro;
     private bool _ocupado;
     private bool _cameraPronta;

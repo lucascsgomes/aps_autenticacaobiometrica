@@ -15,7 +15,7 @@ namespace Ministerio.Api.Endpoints;
 /// <summary>Relatório de segurança: quem tentou entrar e abrir o quê, e o que foi recusado. Só o ministro (nível 3) vê.</summary>
 internal static class RelatorioEndpoints
 {
-    private const int Recentes = 50;
+    private const int Recentes = 200;
     private const int LimiteDoCsv = 5000;
 
     public static IEndpointRouteBuilder MapearRelatorios(this IEndpointRouteBuilder rotas)

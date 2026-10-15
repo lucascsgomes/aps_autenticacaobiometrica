@@ -18,59 +18,74 @@ else if (_relatorio is null)
 }
 else
 {
-    <section class="cartao">
-        <div class="indicadores">
-            <div><strong>@_relatorio.Total</strong><span>tentativas</span></div>
-            <div><strong>@_relatorio.Aceitos</strong><span>aceitas</span></div>
-            <div><strong>@_relatorio.Recusados</strong><span>recusadas</span></div>
-            <div><strong>@_relatorio.TentativasIndevidas</strong><span>acima do nível</span></div>
-        </div>
-    </section>
+    <div class="resumo">
+        <div class="c-agua"><strong>@_relatorio.Total</strong><span>tentativas</span></div>
+        <div class="c-folha"><strong>@_relatorio.Aceitos</strong><span>aceitas</span></div>
+        <div class="c-erro"><strong>@_relatorio.Recusados</strong><span>recusadas</span></div>
+        <div class="c-terra"><strong>@_relatorio.TentativasIndevidas</strong><span>acima do nível</span></div>
+    </div>
 
-    <section class="cartao">
-        <h2>Por tipo de acesso</h2>
-        <ul class="lista">
-            @foreach (var c in _relatorio.PorEvento)
-            {
-                <li><span>@Rotulo(c.Nome)</span><strong>@c.Total</strong></li>
-            }
-        </ul>
+    <div class="grade-niveis">
+        <section class="cartao largo">
+            <h2>Por tipo de acesso</h2>
+            @Barras(_relatorio.PorEvento, "")
+        </section>
         @if (_relatorio.PorMotivo.Count > 0)
         {
-            <h2>Motivos das recusas</h2>
-            <ul class="lista">
-                @foreach (var c in _relatorio.PorMotivo)
-                {
-                    <li><span>@Rotulo(c.Nome)</span><strong>@c.Total</strong></li>
-                }
-            </ul>
+            <section class="cartao largo">
+                <h2>Motivos das recusas</h2>
+                <ul class="barras erro">
+                    @foreach (var c in _relatorio.PorMotivo)
+                    {
+                        var maior = _relatorio.PorMotivo.Max(m => m.Total);
+                        <li>
+                            <button type="button" class="link @(_motivo == c.Nome ? "ativo" : "")" @onclick="() => Filtrar(c.Nome)">@Rotulo(c.Nome)</button>
+                            <span class="trilho"><i style="width:@(c.Total * 100 / maior)%"></i></span>
+                            <strong>@c.Total</strong>
+                        </li>
+                    }
+                </ul>
+                <p class="rotulo">Clique num motivo para ver quem tentou, quando e de qual IP.</p>
+            </section>
         }
-    </section>
+    </div>
 
-    <section class="cartao largo">
-        <h2>Últimas tentativas</h2>
+    <div class="secao-titulo" id="tentativas">
+        <h2>@(_motivo is null ? "Últimas tentativas" : $"Tentativas recusadas: {Rotulo(_motivo)}")</h2>
+        <div class="acoes">
+            @if (_motivo is not null)
+            {
+                <button type="button" class="secundario" @onclick="() => Filtrar(null)">Ver todas</button>
+            }
+            <button type="button" class="secundario" disabled="@_baixando" @onclick="BaixarAsync">Baixar tudo em CSV</button>
+        </div>
+    </div>
+    <div class="painel-tabela">
         <div class="tabela">
             <table>
-                <thead><tr><th>Quando</th><th>Quem</th><th>Acesso</th><th>Resultado</th><th>Motivo</th><th>Detalhe</th></tr></thead>
+                <thead><tr><th>Quando</th><th>Quem</th><th>Acesso</th><th>Resultado</th><th>Motivo</th><th>IP</th><th>Detalhe</th></tr></thead>
                 <tbody>
-                    @foreach (var a in _relatorio.Recentes)
+                    @foreach (var a in _relatorio.Recentes.Where(a => _motivo is null || a.Motivo == _motivo))
                     {
-                        <tr class="@(a.Resultado == "RECUSADO" ? "recusado" : "")">
+                        <tr>
                             <td>@Formato.DataHora(a.Quando)</td>
                             <td>@(a.Usuario ?? "Não identificado")</td>
                             <td>@Rotulo(a.Evento)</td>
-                            <td>@(a.Resultado == "ACEITO" ? "Aceito" : "Recusado")</td>
+                            <td><span class="selo @(a.Resultado == "ACEITO" ? "" : "erro")">@(a.Resultado == "ACEITO" ? "Aceito" : "Recusado")</span></td>
                             <td>@(a.Motivo is null ? "" : Rotulo(a.Motivo))</td>
+                            <td>@a.Ip</td>
                             <td>@a.Detalhe</td>
                         </tr>
                     }
                 </tbody>
             </table>
         </div>
-        <div class="acoes">
-            <button type="button" class="secundario" disabled="@_baixando" @onclick="BaixarAsync">Baixar tudo em CSV</button>
-        </div>
-    </section>
+        @if (_motivo is not null && !_relatorio.Recentes.Any(a => a.Motivo == _motivo))
+        {
+            <p class="vazio">Nenhuma entre as mais recentes. O CSV traz tudo.</p>
+        }
+        <div class="rodape-tabela">As 200 tentativas mais recentes. Quem não foi identificado aparece como "Não identificado": o CPF digitado não é guardado. O CSV traz tudo.</div>
+    </div>
 }
 
 @code {
@@ -99,6 +114,9 @@ else
     private RelatorioResponse? _relatorio;
     private string? _erro;
     private bool _baixando;
+    private string? _motivo;
+
+    private void Filtrar(string? motivo) => _motivo = motivo == _motivo ? null : motivo;
 
     protected override async Task CarregarAsync()
     {
@@ -112,6 +130,13 @@ else
             _erro = r.Erro!.Mensagem;
         }
     }
+
+    private static RenderFragment Barras(IReadOnlyList<ContagemDto> itens, string classe) => b =>
+    {
+        var maior = Math.Max(1, itens.Select(i => i.Total).DefaultIfEmpty(1).Max());
+        b.AddMarkupContent(0, $"<ul class=\"barras {classe}\">" + string.Concat(itens.Select(i =>
+            $"<li><span>{System.Net.WebUtility.HtmlEncode(Rotulo(i.Nome))}</span><span class=\"trilho\"><i style=\"width:{i.Total * 100 / maior}%\"></i></span><strong>{i.Total}</strong></li>")) + "</ul>");
+    };
 
     private static string Rotulo(string codigo) => Rotulos.GetValueOrDefault(codigo, codigo);
 

@@ -13,7 +13,13 @@ else if (_usuarios is null)
 }
 else
 {
-    <p class="rotulo">Mude o nível de acesso (1 servidor, 2 diretor, 3 ministro) e quem é administrador. Cada mudança pede o seu rosto e fica no relatório.</p>
+    <div class="resumo">
+        <div class="c-agua"><strong>@_usuarios.Count(u => u.Nivel == 1)</strong><span>servidores (nível 1)</span></div>
+        <div class="c-folha"><strong>@_usuarios.Count(u => u.Nivel == 2)</strong><span>diretores (nível 2)</span></div>
+        <div class="c-terra"><strong>@_usuarios.Count(u => u.Nivel == 3)</strong><span>ministros (nível 3)</span></div>
+        <div class="c-erro"><strong>@_usuarios.Count(u => u.Admin)</strong><span>administradores</span></div>
+    </div>
+    <p class="rotulo">Mude o nível de acesso e quem é administrador. Cada mudança pede o seu rosto e fica no relatório.</p>
 
     @if (_aviso is not null)
     {
@@ -63,34 +69,42 @@ else
         <input @bind="_filtro" @bind:event="oninput" placeholder="Nome" autocomplete="off" />
     </label>
 
-    <div class="tabela">
-        <table>
-            <thead>
-                <tr><th>Nome</th><th>CPF</th><th>Nível</th><th>Admin</th><th>Rosto</th><th></th></tr>
-            </thead>
-            <tbody>
-                @foreach (var u in Filtrados())
-                {
-                    <tr>
-                        <td>@u.Nome@(u.EhVoce ? " (você)" : "")</td>
-                        <td>@u.CpfMascarado</td>
-                        <td>@u.Nivel: @u.Cargo</td>
-                        <td>@(u.Admin ? (u.AdminFixo ? "Sim (fixo)" : "Sim") : "Não")</td>
-                        <td>@(u.TemRosto ? "Sim" : "Não")</td>
-                        <td>
-                            @if (u.Status == "ATIVO")
-                            {
-                                <button type="button" class="link" disabled="@_ocupado" @onclick="() => Editar(u)">Alterar</button>
-                            }
-                            else
-                            {
-                                <span class="rotulo">cadastro pendente</span>
-                            }
-                        </td>
-                    </tr>
-                }
-            </tbody>
-        </table>
+    <div class="painel-tabela">
+        <div class="tabela">
+            <table>
+                <thead>
+                    <tr><th>Pessoa</th><th>CPF</th><th>Nível</th><th>Admin</th><th>Rosto</th><th></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var u in Filtrados())
+                    {
+                        <tr>
+                            <td>
+                                <div class="pessoa">
+                                    <span class="avatar" aria-hidden="true">@Iniciais(u.Nome)</span>
+                                    <span>@u.Nome@(u.EhVoce ? " (você)" : "")</span>
+                                </div>
+                            </td>
+                            <td>@u.CpfMascarado</td>
+                            <td><span class="selo n@(u.Nivel)">@u.Nivel: @u.Cargo</span></td>
+                            <td>@if (u.Admin) { <span class="selo admin">@(u.AdminFixo ? "Admin fixo" : "Admin")</span> } else { <span class="rotulo">-</span> }</td>
+                            <td><span class="selo @(u.TemRosto ? "" : "alerta")">@(u.TemRosto ? "Cadastrado" : "Sem rosto")</span></td>
+                            <td>
+                                @if (u.Status == "ATIVO")
+                                {
+                                    <button type="button" class="secundario" disabled="@_ocupado" @onclick="() => Editar(u)">Alterar</button>
+                                }
+                                else
+                                {
+                                    <span class="rotulo">cadastro pendente</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="rodape-tabela">@Filtrados().Count() de @_usuarios.Count cadastrados.</div>
     </div>
     @if (!Filtrados().Any())
     {
@@ -124,6 +138,9 @@ else
             _erroDaLista = r.Erro!.Mensagem;
         }
     }
+
+    private static string Iniciais(string nome) =>
+        string.Concat(nome.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(p => char.ToUpperInvariant(p[0])));
 
     private IEnumerable<UsuarioAdminDto> Filtrados() =>
         (_usuarios ?? []).Where(u => string.IsNullOrWhiteSpace(_filtro) || u.Nome.Contains(_filtro.Trim(), StringComparison.CurrentCultureIgnoreCase));
