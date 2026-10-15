@@ -13,7 +13,7 @@
     @if (_modo == Modo.Identificar)
     {
         <p>Olhe para a câmera, com o rosto inteiro no quadro e boa luz. O sistema descobre quem você é, sem precisar do CPF.</p>
-        <Camera @ref="_camera" OnPronta="() => _cameraPronta = true" />
+        <Camera @ref="_camera" Verificando="_ocupado" OnPronta="() => _cameraPronta = true" />
         @if (_erro is not null)
         {
             <p class="aviso erro" role="alert">@_erro</p>
@@ -26,7 +26,7 @@
     else if (_modo == Modo.RostoComCpf)
     {
         <p>Olhe para a câmera, com o rosto inteiro no quadro e boa luz, e toque em entrar.</p>
-        <Camera @ref="_camera" OnPronta="() => _cameraPronta = true" />
+        <Camera @ref="_camera" Verificando="_ocupado" OnPronta="() => _cameraPronta = true" />
         @if (_erro is not null)
         {
             <p class="aviso erro" role="alert">@_erro</p>

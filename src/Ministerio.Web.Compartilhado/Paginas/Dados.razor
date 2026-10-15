@@ -18,7 +18,7 @@ else if (_dados is null)
     {
         <section class="cartao estreito">
             <p>Este nível só abre com o seu rosto, confirmado agora. Olhe para a câmera, com o rosto inteiro no quadro e boa luz.</p>
-            <Camera @ref="_camera" OnPronta="() => _cameraPronta = true" />
+            <Camera @ref="_camera" Verificando="_ocupado" OnPronta="() => _cameraPronta = true" />
             @if (_erro is not null)
             {
                 <p class="aviso erro" role="alert">@_erro</p>

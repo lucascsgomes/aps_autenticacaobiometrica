@@ -3,6 +3,16 @@
 
 <div class="camera">
     <video @ref="_video" autoplay muted playsinline></video>
+    @if (_erro is null)
+    {
+        <div class="mira @(Verificando ? "analisando" : "")" aria-hidden="true">
+            <span class="oval"></span>
+            <span class="canto c1"></span><span class="canto c2"></span><span class="canto c3"></span><span class="canto c4"></span>
+            <span class="varredura"></span>
+        </div>
+        <p class="legenda-camera" role="status">@(Verificando ? "Analisando o rosto..." : "Centralize o rosto no oval")</p>
+    }
+
     @if (_erro is not null)
     {
         <p class="aviso erro" role="alert">@_erro</p>
@@ -13,6 +23,10 @@
     private ElementReference _video;
     private string? _erro;
     private bool _ligada;
+
+    /// <summary>Liga a animação de análise enquanto a página espera a resposta.</summary>
+    [Parameter]
+    public bool Verificando { get; set; }
 
     /// <summary>Dispara quando a câmera abriu e já dá para capturar.</summary>
     [Parameter]

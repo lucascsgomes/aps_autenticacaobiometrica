@@ -315,3 +315,31 @@ main > .rotulo { margin-bottom: 12px; }
 .barras button.link { text-align: left; color: var(--texto); text-decoration: underline dotted; font-size: inherit; }
 .barras button.link:hover { color: var(--erro); }
 .barras button.link.ativo { font-weight: 700; color: var(--erro); }
+
+/* ---- Mira da câmera ---- */
+.camera { position: relative; }
+.mira { position: absolute; inset: 0 0 34px; pointer-events: none; border-radius: 12px; overflow: hidden; }
+.mira .oval {
+    position: absolute; left: 50%; top: 50%; width: min(46%, 190px); height: 78%;
+    transform: translate(-50%, -50%); border-radius: 50%;
+    border: 3px dashed rgb(255 255 255 / 0.8); box-shadow: 0 0 0 999px rgb(0 0 0 / 0.28);
+    animation: respirar 2.4s ease-in-out infinite;
+}
+.mira .canto { position: absolute; width: 26px; height: 26px; border: 0 solid #8cf0a8; }
+.mira .c1 { top: 10px; left: 10px; border-top-width: 4px; border-left-width: 4px; border-top-left-radius: 8px; }
+.mira .c2 { top: 10px; right: 10px; border-top-width: 4px; border-right-width: 4px; border-top-right-radius: 8px; }
+.mira .c3 { bottom: 10px; left: 10px; border-bottom-width: 4px; border-left-width: 4px; border-bottom-left-radius: 8px; }
+.mira .c4 { bottom: 10px; right: 10px; border-bottom-width: 4px; border-right-width: 4px; border-bottom-right-radius: 8px; }
+.mira .varredura {
+    position: absolute; left: 12%; right: 12%; top: 8%; height: 3px; border-radius: 3px; opacity: 0;
+    background: linear-gradient(90deg, transparent, #8cf0a8, transparent); box-shadow: 0 0 14px 4px rgb(140 240 168 / 0.6);
+}
+.mira.analisando .oval { border-style: solid; border-color: #8cf0a8; animation: none; box-shadow: 0 0 0 999px rgb(0 0 0 / 0.4), 0 0 24px rgb(140 240 168 / 0.7) inset; }
+.mira.analisando .varredura { opacity: 1; animation: varrer 1.3s ease-in-out infinite alternate; }
+.legenda-camera { margin: 6px 0 0; text-align: center; font-size: 0.85rem; color: var(--suave); }
+
+@keyframes respirar { 50% { transform: translate(-50%, -50%) scale(1.03); border-color: rgb(255 255 255 / 0.5); } }
+@keyframes varrer { from { top: 8%; } to { top: 90%; } }
+@media (prefers-reduced-motion: reduce) {
+    .mira .oval, .mira.analisando .varredura { animation: none; }
+}

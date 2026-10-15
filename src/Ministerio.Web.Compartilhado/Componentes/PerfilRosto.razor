@@ -26,7 +26,7 @@
         else if (_etapa == Etapa.Trocar)
         {
             <p>Tire a foto do novo rosto e confirme com a senha. Depois disso você precisa entrar de novo.</p>
-            <Camera @ref="_camera" OnPronta="() => _cameraPronta = true" />
+            <Camera @ref="_camera" Verificando="_ocupado" OnPronta="() => _cameraPronta = true" />
             @if (!_fotoTirada)
             {
                 <div class="acoes">
