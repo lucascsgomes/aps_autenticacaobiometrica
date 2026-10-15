@@ -192,6 +192,16 @@ public sealed class ApiMinisterio(HttpClient http, SessaoApp sessao) : IDisposab
     /// </summary>
     public async Task<Resposta<T>> EnviarAsync<T>(Func<HttpRequestMessage> criar, string? bearer = null, bool anonima = false)
     {
+        // Com foto, a resposta nunca chega antes da animação de análise ser vista (a API local responde em milésimos).
+        var comFoto = criar().Content is MultipartFormDataContent m && m.Any(p => p.Headers.ContentType?.MediaType == "image/jpeg");
+        var minimo = comFoto ? Task.Delay(1800) : Task.CompletedTask;
+        var resposta = await EnviarSemEsperaAsync<T>(criar, bearer, anonima);
+        await minimo;
+        return resposta;
+    }
+
+    private async Task<Resposta<T>> EnviarSemEsperaAsync<T>(Func<HttpRequestMessage> criar, string? bearer, bool anonima)
+    {
         var token = bearer;
         if (bearer is null && !anonima)
         {
