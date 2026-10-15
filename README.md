@@ -169,9 +169,13 @@ Medido com fotos públicas reais (uma pessoa e outra): mesma pessoa em outra fot
 
 Rotas: `GET /v1/admin/usuarios` e `PUT /v1/admin/usuarios/{id}/acesso` (multipart: `desafio_id`, `dados` com `nivel` e/ou `admin`, `image`), com desafio aberto antes em `POST /v1/biometria/desafios` (`finalidade: ALTERAR_ACESSO`).
 
+## Interface
+
+Tema verde do Ministério do Meio Ambiente (com modo escuro) e layout responsivo. A câmera tem uma mira (oval e cantos) e, enquanto o rosto é analisado, uma linha de varredura com a legenda "Analisando o rosto..."; toda chamada com foto leva no mínimo 1,8 s para a animação ser vista, e quem prefere menos movimento no sistema a vê parada. As tabelas dos níveis 1, 2 e 3 têm resumo, busca e filtro por estado, e as colunas restritas de cada nível ficam destacadas.
+
 ## Relatório de segurança
 
-Cada tentativa (entrada por senha, rosto ou identificação; consulta de cada nível; leitura do relatório) grava quem, quando, o resultado, o motivo e o IP. O ministro vê, em `/relatorio`, os totais (aceitas, recusadas, acima do nível), a contagem por tipo de acesso e por motivo, as últimas 50 tentativas e pode baixar tudo em CSV.
+Cada tentativa (entrada por senha, rosto ou identificação; consulta de cada nível; leitura do relatório) grava quem, quando, o resultado, o motivo e o IP. O ministro vê, em `/relatorio`, os totais (aceitas, recusadas, acima do nível), a contagem por tipo de acesso e por motivo, as últimas 200 tentativas (com o IP) e pode baixar tudo em CSV. Ao clicar num motivo de recusa, a tabela mostra quem tentou, quando e de qual IP; quem não foi identificado aparece como "Não identificado", porque o CPF digitado e a foto não são guardados (LGPD).
 
 ## Publicação (link fixo)
 

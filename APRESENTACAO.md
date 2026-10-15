@@ -109,13 +109,14 @@ Diga também (tema geral, não medimos): modelos de reconhecimento facial podem 
 
 Antes: um administrador (CPF em `Admin:Cpfs`) e três cadastrados; promova um a ministro e outro a diretor pelo painel `/admin`. Abra o site 2 minutos antes (os serviços dormem).
 
-1. **Entrar só com o rosto, sem CPF** (identificação 1 para N): "Entrar com o rosto". Mostre o painel com o nível e o cargo.
+1. **Entrar só com o rosto, sem CPF** (identificação 1 para N): "Entrar com o rosto". Mostre a mira na câmera e a animação "Analisando o rosto..." (é o aviso de que o sistema está identificando). Depois, o painel com o nível e o cargo.
 2. **Nível 1** como servidor: abre direto, só município, estado, produto e ano.
 3. **Nível 2** como diretor: pede o rosto de novo, abre, e a tabela ganha propriedade, quantidade e área.
 4. **O momento mais convincente:** peça para o **servidor** tentar o nível 3. Mostre a recusa por nível (`NIVEL_INSUFICIENTE`) e, depois, no relatório, a tentativa registrada.
 5. **Rosto de outra pessoa** no nível 2: recusado, e a pessoa precisa de um novo desafio.
 6. **Nível 3** como ministro: aparecem proprietário, multa e situação.
-7. **Relatório** (só o ministro): as recusas aparecem em vermelho, com a contagem de tentativas acima do nível e o CSV.
+7. **Relatório** (só o ministro): gráficos de acessos por tipo e por motivo. Clique num motivo de recusa (por exemplo "Rosto não confirmado") para ver **quem tentou, quando e de qual IP**; quem não foi identificado aparece como "Não identificado" (o CPF digitado não é guardado, por LGPD). O CSV traz tudo.
+7b. **Painel admin** (`/admin`): mude o nível de alguém e confirme com o rosto; a mudança aparece no relatório com o antes e o depois.
 8. **Plano B** se a câmera ou o serviço falharem: entrar com CPF e senha (nível 1) e mostrar os prints ou o vídeo gravado antes.
 
 ## 6. Um bug que a medição achou (1 min)
