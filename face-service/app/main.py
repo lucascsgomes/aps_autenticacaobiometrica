@@ -1,4 +1,4 @@
-"""Microserviço de reconhecimento facial. Stateless: não acessa banco e não grava imagem."""
+"""Microserviço de reconhecimento facial. Stateless: não acessa base de dados e não grava imagem."""
 import json
 import uuid
 from contextlib import asynccontextmanager

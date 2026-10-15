@@ -8,7 +8,7 @@ THRESHOLD_COSINE = 0.363
 
 def comparar(modelo_sface, caracteristicas_a, caracteristicas_b):
     try:
-        # match pode normalizar os vetores; preservamos o banco com cópias.
+        # match pode normalizar os vetores; preservamos os vetores guardados com cópias.
         score = float(modelo_sface.match(caracteristicas_a.copy(), caracteristicas_b.copy(),
                                          cv2.FaceRecognizerSF_FR_COSINE))
     except cv2.error as erro:

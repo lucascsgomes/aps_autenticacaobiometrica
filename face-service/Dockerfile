@@ -14,7 +14,7 @@ ADD --chmod=644 https://media.githubusercontent.com/media/opencv/opencv_zoo/main
 ADD --chmod=644 https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx modelos/
 
 COPY app app
-COPY banco banco
+COPY cadastro cadastro
 COPY biometria biometria
 COPY processamento processamento
 COPY visualizacao visualizacao

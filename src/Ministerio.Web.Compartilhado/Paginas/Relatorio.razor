@@ -1,0 +1,134 @@
+@page "/relatorio"
+@inherits PaginaProtegida
+@inject ModuloJs Modulo
+
+<h1>Relatório de segurança</h1>
+
+@if (!Autenticado)
+{
+    <p class="vazio">Carregando...</p>
+}
+else if (_erro is not null)
+{
+    <p class="aviso erro" role="alert">@_erro</p>
+}
+else if (_relatorio is null)
+{
+    <p class="vazio">Carregando...</p>
+}
+else
+{
+    <section class="cartao">
+        <div class="indicadores">
+            <div><strong>@_relatorio.Total</strong><span>tentativas</span></div>
+            <div><strong>@_relatorio.Aceitos</strong><span>aceitas</span></div>
+            <div><strong>@_relatorio.Recusados</strong><span>recusadas</span></div>
+            <div><strong>@_relatorio.TentativasIndevidas</strong><span>acima do nível</span></div>
+        </div>
+    </section>
+
+    <section class="cartao">
+        <h2>Por tipo de acesso</h2>
+        <ul class="lista">
+            @foreach (var c in _relatorio.PorEvento)
+            {
+                <li><span>@Rotulo(c.Nome)</span><strong>@c.Total</strong></li>
+            }
+        </ul>
+        @if (_relatorio.PorMotivo.Count > 0)
+        {
+            <h2>Motivos das recusas</h2>
+            <ul class="lista">
+                @foreach (var c in _relatorio.PorMotivo)
+                {
+                    <li><span>@Rotulo(c.Nome)</span><strong>@c.Total</strong></li>
+                }
+            </ul>
+        }
+    </section>
+
+    <section class="cartao">
+        <h2>Últimas tentativas</h2>
+        <div class="tabela">
+            <table>
+                <thead><tr><th>Quando</th><th>Quem</th><th>Acesso</th><th>Resultado</th><th>Motivo</th></tr></thead>
+                <tbody>
+                    @foreach (var a in _relatorio.Recentes)
+                    {
+                        <tr class="@(a.Resultado == "RECUSADO" ? "recusado" : "")">
+                            <td>@Formato.DataHora(a.Quando)</td>
+                            <td>@(a.Usuario ?? "Não identificado")</td>
+                            <td>@Rotulo(a.Evento)</td>
+                            <td>@(a.Resultado == "ACEITO" ? "Aceito" : "Recusado")</td>
+                            <td>@(a.Motivo is null ? "" : Rotulo(a.Motivo))</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="acoes">
+            <button type="button" class="secundario" disabled="@_baixando" @onclick="BaixarAsync">Baixar tudo em CSV</button>
+        </div>
+    </section>
+}
+
+@code {
+    private static readonly Dictionary<string, string> Rotulos = new()
+    {
+        ["LOGIN_SENHA"] = "Entrada com senha",
+        ["LOGIN_ROSTO"] = "Entrada com CPF e rosto",
+        ["LOGIN_IDENTIFICACAO"] = "Entrada por identificação (1 para N)",
+        ["CONSULTA_NIVEL1"] = "Consulta nível 1",
+        ["CONSULTA_NIVEL2"] = "Consulta nível 2",
+        ["CONSULTA_NIVEL3"] = "Consulta nível 3",
+        ["RELATORIO"] = "Relatório",
+        ["FACE_NOT_VERIFIED"] = "Rosto não confirmado",
+        ["NIVEL_INSUFICIENTE"] = "Nível acima do permitido",
+        ["INVALID_CREDENTIALS"] = "CPF ou senha inválidos",
+        ["NO_FACE_DETECTED"] = "Nenhum rosto na foto",
+        ["MULTIPLE_FACES"] = "Mais de um rosto na foto",
+        ["FACE_REQUIRED"] = "Exigiu o rosto",
+        ["ACCOUNT_LOCKED"] = "Acesso bloqueado por falhas",
+        ["FACE_SERVICE_UNAVAILABLE"] = "Reconhecimento indisponível",
+    };
+
+    private RelatorioResponse? _relatorio;
+    private string? _erro;
+    private bool _baixando;
+
+    protected override async Task CarregarAsync()
+    {
+        var r = await Api.RelatorioAsync();
+        if (r.Ok)
+        {
+            _relatorio = r.Valor;
+        }
+        else
+        {
+            _erro = r.Erro!.Mensagem;
+        }
+    }
+
+    private static string Rotulo(string codigo) => Rotulos.GetValueOrDefault(codigo, codigo);
+
+    private async Task BaixarAsync()
+    {
+        _baixando = true;
+        try
+        {
+            var r = await Api.BaixarRelatorioAsync();
+            if (r.Ok)
+            {
+                await (await Modulo.ObterAsync()).InvokeVoidAsync("baixar", "acessos.csv", r.Valor, "text/csv");
+            }
+            else
+            {
+                _erro = r.Erro!.Mensagem;
+            }
+        }
+        finally
+        {
+            _baixando = false;
+        }
+    }
+}

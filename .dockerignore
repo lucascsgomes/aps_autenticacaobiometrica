@@ -6,6 +6,5 @@
 docs
 tests
 face-service
-aps_bankapp
-src/Banco.Web
-src/Banco.Web.Compartilhado
+src/Ministerio.Web
+src/Ministerio.Web.Compartilhado

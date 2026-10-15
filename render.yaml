@@ -1,15 +1,16 @@
 # Blueprint do Render: a API e o reconhecimento facial, os dois no plano grátis (512 MB cada; o face-service usa cerca de 200 MB).
 # Os valores marcados com sync: false são pedidos na criação e nunca ficam no repositório.
 services:
+  # O nome banco-api é o do serviço que já existe no Render (a URL dele depende disso): renomear aqui cria outro serviço.
   - type: web
     name: banco-api
     runtime: docker
-    dockerfilePath: ./src/Banco.Api/Dockerfile
+    dockerfilePath: ./src/Ministerio.Api/Dockerfile
     dockerContext: .
     plan: free
     healthCheckPath: /health
     envVars:
-      - key: ConnectionStrings__Banco # connection string do Neon (com SSL Mode=Require)
+      - key: ConnectionStrings__Dados # connection string do Neon (com SSL Mode=Require)
         sync: false
       - key: Jwt__Chave # sorteada pelo Render, mínimo de 32 caracteres
         generateValue: true
@@ -20,6 +21,10 @@ services:
           type: web
           name: face-service
           envVarKey: FACE_INTERNAL_KEY
+      - key: Niveis__Ministro # CPF do ministro (só dígitos): é o único que abre o nível 3 e lê o relatório
+        sync: false
+      - key: Niveis__Diretores__0 # CPF de um diretor de divisão (nível 2); para mais, crie Niveis__Diretores__1, __2... no painel
+        sync: false
       # Face__BaseUrl (a URL pública do face-service) entra à mão, depois do primeiro deploy: veja o README.
       - key: Cors__Origens__0 # origem da interface web (GitHub Pages), sem barra no fim
         value: https://lucascsgomes.github.io

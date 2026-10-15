@@ -1,0 +1,41 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject SessaoApp Sessao
+@inject ApiMinisterio Api
+@inject NavigationManager Navegacao
+
+<header class="topo">
+    <a class="marca" href="">Acesso Biométrico</a>
+    @if (Sessao.Ativa)
+    {
+        <nav>
+            <NavLink href="" Match="NavLinkMatch.All">Início</NavLink>
+            <NavLink href="perfil">Perfil</NavLink>
+            @if (Sessao.Atual?.Usuario.Nivel >= 3)
+            {
+                <NavLink href="relatorio">Relatório</NavLink>
+            }
+            <button type="button" class="link" @onclick="SairAsync">Sair</button>
+        </nav>
+    }
+</header>
+
+<main>
+    @Body
+</main>
+
+<footer class="rodape">Projeto acadêmico. Todos os dados são fictícios.</footer>
+
+@code {
+    protected override void OnInitialized() => Sessao.Mudou += Atualizar;
+
+    private void Atualizar() => _ = InvokeAsync(StateHasChanged);
+
+    private async Task SairAsync()
+    {
+        await Api.SairAsync();
+        Navegacao.NavigateTo("entrar");
+    }
+
+    public void Dispose() => Sessao.Mudou -= Atualizar;
+}

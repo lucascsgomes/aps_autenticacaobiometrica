@@ -4,9 +4,9 @@ on:
   push:
     branches: [main]
     paths:
-      - src/Banco.Web/**
-      - src/Banco.Web.Compartilhado/**
-      - src/Banco.Contratos/**
+      - src/Ministerio.Web/**
+      - src/Ministerio.Web.Compartilhado/**
+      - src/Ministerio.Contratos/**
       - .github/workflows/pages.yml
   workflow_dispatch:
 
@@ -33,7 +33,7 @@ jobs:
           global-json-file: global.json
 
       - name: Publica o Blazor WebAssembly
-        run: dotnet publish src/Banco.Web --configuration Release --output out
+        run: dotnet publish src/Ministerio.Web --configuration Release --output out
 
       - name: Ajusta para o GitHub Pages
         env:

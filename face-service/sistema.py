@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from banco.memoria import BancoMemoria, validar_identificador
+from cadastro.memoria import CadastroEmMemoria, validar_identificador
 from biometria.pipeline import PipelineFacial
 from biometria.comparacao import comparar, corresponde
 from biometria.identificacao import identificar
@@ -20,17 +20,17 @@ class SistemaBiometrico:
     """Uma instância mantém os cadastros durante a sessão local."""
     def __init__(self, configuracao=None, pasta_resultados=None):
         self._pipeline = PipelineFacial(configuracao, pasta_resultados)
-        self._banco = BancoMemoria()
+        self._cadastro = CadastroEmMemoria()
 
     def cadastrar_pessoa(self, identificador, caminho_imagem):
-        identificador = self._banco.exigir_novo(identificador)
+        identificador = self._cadastro.exigir_novo(identificador)
         amostra = self._pipeline.processar(caminho_imagem, identificador, 'cadastro')
-        self._banco.adicionar(identificador, amostra)
+        self._cadastro.adicionar(identificador, amostra)
         return Resultado(True, 'Pessoa cadastrada.', identificador, etapas=amostra.etapas)
 
     def autenticar_pessoa(self, identificador, caminho_imagem):
         identificador = validar_identificador(identificador)
-        cadastrada = self._banco.obter(identificador)
+        cadastrada = self._cadastro.obter(identificador)
         amostra = self._pipeline.processar(caminho_imagem, identificador, 'autenticacao')
         score = comparar(self._pipeline.reconhecedor.modelo, cadastrada.caracteristicas, amostra.caracteristicas)
         aceita = corresponde(score)
@@ -39,7 +39,7 @@ class SistemaBiometrico:
 
     def identificar_pessoa(self, caminho_imagem):
         """1 para N: descobre quem é a pessoa da foto entre todas as cadastradas, sem informar identificador."""
-        candidatos = self._banco.todos()
+        candidatos = self._cadastro.todos()
         if not candidatos:
             raise ErroBiometria('Nenhuma pessoa cadastrada para comparar.')
         amostra = self._pipeline.processar(caminho_imagem, 'identificacao', 'identificacao')

@@ -1,0 +1,138 @@
+@inject ApiMinisterio Api
+@inject SessaoApp Sessao
+@inject NavigationManager Navegacao
+
+<section class="cartao">
+    <h2>Rosto cadastrado</h2>
+
+    @if (Status is null)
+    {
+        <p class="vazio">Carregando...</p>
+    }
+    else
+    {
+        <p>@(Status.Cadastrada ? $"Cadastrado em {Formato.DataHora(Status.CadastradaEm!.Value)}. A foto não é guardada, só uma representação numérica cifrada." : "Nenhum rosto cadastrado. Você entra e confirma com a senha.")</p>
+
+        @if (_etapa == Etapa.Nenhuma)
+        {
+            <div class="acoes">
+                <button type="button" class="secundario" @onclick="() => Iniciar(Etapa.Trocar)">@(Status.Cadastrada ? "Trocar o rosto" : "Cadastrar o rosto")</button>
+                @if (Status.Cadastrada)
+                {
+                    <button type="button" class="secundario" @onclick="() => Iniciar(Etapa.Excluir)">Excluir o rosto</button>
+                }
+            </div>
+        }
+        else if (_etapa == Etapa.Trocar)
+        {
+            <p>Tire a foto do novo rosto e confirme com a senha. Depois disso você precisa entrar de novo.</p>
+            <Camera @ref="_camera" OnPronta="() => _cameraPronta = true" />
+            @if (!_fotoTirada)
+            {
+                <div class="acoes">
+                    <button type="button" disabled="@(!_cameraPronta)" @onclick="TirarFotoAsync">Tirar a foto</button>
+                    <button type="button" class="link" @onclick="Cancelar">Cancelar</button>
+                </div>
+            }
+            else
+            {
+                <Confirmacao Texto="Foto tirada. Digite a senha para trocar o rosto." Ocupado="_ocupado" Erro="@_erro" OnConfirmar="TrocarAsync" OnCancelar="Cancelar" />
+            }
+        }
+        else
+        {
+            <Confirmacao Texto="Digite a senha para apagar o rosto da sua conta." Ocupado="_ocupado" Erro="@_erro" OnConfirmar="ExcluirAsync" OnCancelar="Cancelar" />
+        }
+    }
+</section>
+
+@code {
+    private enum Etapa { Nenhuma, Trocar, Excluir }
+
+    private Etapa _etapa;
+    private Camera? _camera;
+    private bool _cameraPronta;
+    private bool _fotoTirada;
+    private byte[]? _foto;
+    private bool _ocupado;
+    private string? _erro;
+
+    [Parameter]
+    public BiometriaResponse? Status { get; set; }
+
+    /// <summary>Avisa a página para recarregar o status depois de uma mudança.</summary>
+    [Parameter]
+    public EventCallback OnMudou { get; set; }
+
+    private void Iniciar(Etapa etapa)
+    {
+        _etapa = etapa;
+        _erro = null;
+        _fotoTirada = false;
+        _cameraPronta = false;
+    }
+
+    private void Cancelar()
+    {
+        _etapa = Etapa.Nenhuma;
+        _erro = null;
+        _foto = null;
+    }
+
+    private async Task TirarFotoAsync()
+    {
+        _foto = await _camera!.CapturarAsync();
+        _fotoTirada = _foto is not null;
+    }
+
+    private async Task TrocarAsync(Credencial credencial)
+    {
+        _ocupado = true;
+        _erro = null;
+        try
+        {
+            var r = await Api.AcaoSensivelAsync<BiometriaResponse>(HttpMethod.Put, "/v1/me/biometria", "RECADASTRO", null, credencial, novaImagem: _foto);
+            if (r.Ok)
+            {
+                // A troca encerra todas as sessões: a pessoa entra de novo, já com o rosto novo.
+                Sessao.Aviso = "Rosto atualizado. Entre de novo.";
+                await Api.SairAsync();
+                Navegacao.NavigateTo("entrar");
+                return;
+            }
+
+            _erro = r.Erro!.Mensagem;
+            if (r.Erro.Code is "NO_FACE_DETECTED" or "MULTIPLE_FACES")
+            {
+                _fotoTirada = false; // tira outra foto
+            }
+        }
+        finally
+        {
+            _ocupado = false;
+        }
+    }
+
+    private async Task ExcluirAsync(Credencial credencial)
+    {
+        _ocupado = true;
+        _erro = null;
+        try
+        {
+            var r = await Api.ExcluirRostoAsync(credencial.Senha!);
+            if (r.Ok)
+            {
+                Cancelar();
+                await OnMudou.InvokeAsync();
+            }
+            else
+            {
+                _erro = r.Erro!.Mensagem;
+            }
+        }
+        finally
+        {
+            _ocupado = false;
+        }
+    }
+}

@@ -3,8 +3,8 @@ import json
 import numpy as np
 import pytest
 
-from banco.memoria import BancoMemoria
 from biometria.pipeline import AmostraFacial
+from cadastro.memoria import CadastroEmMemoria
 from config import LIMITE_CANDIDATOS
 from erros import ErroBiometria
 from sistema import SistemaBiometrico
@@ -138,9 +138,9 @@ class PipelineDeTerminal(PipelineFalso):
 def sistema_com(*pessoas, foto):
     sistema = SistemaBiometrico.__new__(SistemaBiometrico)  # sem carregar os modelos de verdade
     sistema._pipeline = PipelineDeTerminal(foto)
-    sistema._banco = BancoMemoria()
+    sistema._cadastro = CadastroEmMemoria()
     for nome, vetor in pessoas:
-        sistema._banco.adicionar(nome, AmostraFacial(vetor, None, None))
+        sistema._cadastro.adicionar(nome, AmostraFacial(vetor, None, None))
     return sistema
 
 

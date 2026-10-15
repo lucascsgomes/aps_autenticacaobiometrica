@@ -2,11 +2,11 @@
 
 Cadastro e autenticação facial por imagens locais, usando Python, OpenCV, YuNet e SFace. Você escolhe a operação, o identificador e a foto pelo terminal.
 
-> **Neste monorepo** o código também roda como **microserviço HTTP** (FastAPI), chamado pela API do banco. O menu de terminal descrito abaixo continua funcionando (`cli.py`). Veja [Modo serviço](#modo-serviço-http) logo abaixo.
+> **Neste monorepo** o código também roda como **microserviço HTTP** (FastAPI), chamado pela API do sistema. O menu de terminal descrito abaixo continua funcionando (`cli.py`). Veja [Modo serviço](#modo-serviço-http) logo abaixo.
 
 ## Modo serviço (HTTP)
 
-Serviço sem estado: não acessa banco e **não grava a imagem**. O vetor facial sai na resposta do `enroll` e volta na requisição do `verify`; quem guarda é a API do banco. As rotas abaixo seguem o contrato interno entre a API e o serviço.
+Serviço sem estado: não acessa base de dados e **não grava a imagem**. O vetor facial sai na resposta do `enroll` e volta na requisição do `verify`; quem guarda é a API do sistema. As rotas abaixo seguem o contrato interno entre a API e o serviço.
 
 | Rota | O que faz | Chave |
 |---|---|---|
@@ -141,7 +141,7 @@ Escolha `1`, digite o nome/identificador e o caminho da foto. Depois escolha `2`
 
 Use uma foto com exatamente um rosto visível. Se nenhum rosto for encontrado, o programa orientará a tirar outra foto de frente, com o rosto alinhado e próximo à câmera. Falhas internas mostram uma mensagem simples, sem detalhes técnicos no terminal; quando já existe uma pasta de etapas, o detalhe é mantido em `execucao.txt`. Identificadores distinguem maiúsculas de minúsculas; espaços externos são removidos. Duplicatas não sobrescrevem cadastros.
 
-**Os cadastros ficam apenas na memória enquanto o programa estiver aberto.** Ao sair, são perdidos. Para autenticar ou identificar, é necessário cadastrar antes na mesma sessão. A opção `3` não pede identificador: compara a foto com **todas** as pessoas cadastradas e diz quem é, ou recusa se ninguém corresponde ou se duas pessoas ficam parecidas demais (margem mínima de 0,05 entre a primeira e a segunda). Arquivos em `resultados/` não são um banco de cadastros.
+**Os cadastros ficam apenas na memória enquanto o programa estiver aberto.** Ao sair, são perdidos. Para autenticar ou identificar, é necessário cadastrar antes na mesma sessão. A opção `3` não pede identificador: compara a foto com **todas** as pessoas cadastradas e diz quem é, ou recusa se ninguém corresponde ou se duas pessoas ficam parecidas demais (margem mínima de 0,05 entre a primeira e a segunda). Arquivos em `resultados/` não são uma base de cadastros.
 
 ## Configuração
 
@@ -192,7 +192,7 @@ Consulte as licenças nas pastas oficiais do [YuNet](https://github.com/opencv/o
 - `sistema.py`: cadastro, autenticação e resultados.
 - `config.py`: configuração do processamento.
 - `erros.py`: exceção de domínio.
-- `banco/memoria.py`: cadastros temporários.
+- `cadastro/memoria.py`: cadastros temporários.
 - `biometria/`: modelos, detector, reconhecimento, comparação e pipeline.
 - `processamento/`: filtros e validação de parâmetros.
 - `visualizacao/etapas.py`: gravação das imagens intermediárias.

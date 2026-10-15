@@ -1,0 +1,166 @@
+@page "/dados/{Nivel:int}"
+@inherits PaginaProtegida
+@implements IDisposable
+
+<h1>Informações de nível @Nivel</h1>
+
+@if (!Autenticado)
+{
+    <p class="vazio">Carregando...</p>
+}
+else if (Nivel is < 1 or > 3)
+{
+    <p class="aviso erro" role="alert">Nível inexistente. Use 1, 2 ou 3.</p>
+}
+else if (_dados is null)
+{
+    @if (Nivel > 1)
+    {
+        <section class="cartao estreito">
+            <p>Este nível só abre com o seu rosto, confirmado agora. Olhe para a câmera, com o rosto inteiro no quadro e boa luz.</p>
+            <Camera @ref="_camera" OnPronta="() => _cameraPronta = true" />
+            @if (_erro is not null)
+            {
+                <p class="aviso erro" role="alert">@_erro</p>
+            }
+            <div class="acoes">
+                <button type="button" disabled="@(_ocupado || !_cameraPronta)" @onclick="AbrirAsync">@(_ocupado ? "Verificando..." : "Confirmar o rosto e abrir")</button>
+                <a class="botao secundario" href="">Voltar</a>
+            </div>
+        </section>
+    }
+    else if (_erro is not null)
+    {
+        <p class="aviso erro" role="alert">@_erro</p>
+    }
+    else
+    {
+        <p class="vazio">Carregando...</p>
+    }
+}
+else
+{
+    <p class="rotulo">@_dados.Itens.Count registros. As informações somem da tela quando você sair desta página.</p>
+    <div class="tabela">
+        <table>
+            <thead>
+                <tr>
+                    <th>Município</th>
+                    <th>UF</th>
+                    <th>Produto</th>
+                    <th>Ano</th>
+                    @if (Nivel >= 2)
+                    {
+                        <th>Propriedade</th>
+                        <th class="num">Litros</th>
+                        <th class="num">Hectares</th>
+                    }
+                    @if (Nivel >= 3)
+                    {
+                        <th>Proprietário</th>
+                        <th>Documento</th>
+                        <th class="num">Multa</th>
+                        <th>Situação</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var p in _dados.Itens)
+                {
+                    <tr>
+                        <td>@p.Municipio</td>
+                        <td>@p.Uf</td>
+                        <td>@p.Agrotoxico</td>
+                        <td>@p.Ano</td>
+                        @if (Nivel >= 2)
+                        {
+                            <td>@p.Propriedade</td>
+                            <td class="num">@p.QuantidadeLitros?.ToString("N2", Invariante)</td>
+                            <td class="num">@p.AreaHectares?.ToString("N2", Invariante)</td>
+                        }
+                        @if (Nivel >= 3)
+                        {
+                            <td>@p.Proprietario</td>
+                            <td>@p.Documento</td>
+                            <td class="num">@(p.MultaCentavos is { } m ? Formato.Reais(m) : "")</td>
+                            <td>@p.Situacao</td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="acoes">
+        <a class="botao secundario" href="">Fechar e voltar</a>
+    </div>
+}
+
+@code {
+    private static readonly System.Globalization.CultureInfo Invariante = System.Globalization.CultureInfo.InvariantCulture;
+
+    [Parameter]
+    public int Nivel { get; set; }
+
+    private DadosResponse? _dados;
+    private string? _erro;
+    private bool _ocupado;
+    private bool _cameraPronta;
+    private Camera? _camera;
+
+    protected override async Task CarregarAsync()
+    {
+        if (Nivel == 1)
+        {
+            Aplicar(await Api.DadosDoNivel1Async());
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Trocar de nível pela barra de endereço descarta o que estava na tela.
+        if (_dados is not null && _dados.Nivel != Nivel)
+        {
+            _dados = null;
+            _erro = null;
+            if (Autenticado)
+            {
+                await CarregarAsync();
+            }
+        }
+    }
+
+    private async Task AbrirAsync()
+    {
+        _ocupado = true;
+        _erro = null;
+        try
+        {
+            var foto = await _camera!.CapturarAsync();
+            if (foto is null)
+            {
+                _erro = "A câmera ainda não está pronta.";
+                return;
+            }
+
+            Aplicar(await Api.DadosRestritosAsync(Nivel, foto));
+        }
+        finally
+        {
+            _ocupado = false;
+        }
+    }
+
+    private void Aplicar(Resposta<DadosResponse> r)
+    {
+        if (r.Ok)
+        {
+            _dados = r.Valor;
+        }
+        else
+        {
+            _erro = r.Erro!.Mensagem;
+        }
+    }
+
+    public void Dispose() => _dados = null;
+}

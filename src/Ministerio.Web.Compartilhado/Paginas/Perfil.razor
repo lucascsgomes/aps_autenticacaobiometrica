@@ -1,0 +1,34 @@
+@page "/perfil"
+@inherits PaginaProtegida
+
+<h1>Perfil e segurança</h1>
+
+@if (!Autenticado || _status is null)
+{
+    <p class="vazio">@(_erro ?? "Carregando...")</p>
+}
+else
+{
+    <PerfilRosto Status="_status" OnMudou="RecarregarAsync" />
+    <PerfilSenha TemRosto="_status.Cadastrada" />
+}
+
+@code {
+    private BiometriaResponse? _status;
+    private string? _erro;
+
+    protected override Task CarregarAsync() => RecarregarAsync();
+
+    private async Task RecarregarAsync()
+    {
+        var r = await Api.BiometriaAsync();
+        if (r.Ok)
+        {
+            _status = r.Valor;
+        }
+        else
+        {
+            _erro = r.Erro!.Mensagem;
+        }
+    }
+}

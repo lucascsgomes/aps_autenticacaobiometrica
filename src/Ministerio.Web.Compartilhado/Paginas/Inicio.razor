@@ -1,0 +1,67 @@
+@page "/"
+@inherits PaginaProtegida
+
+@if (!Autenticado)
+{
+    <p class="vazio">Carregando...</p>
+}
+else if (_erro is not null)
+{
+    <p class="aviso erro" role="alert">@_erro</p>
+}
+else if (_perfil is null)
+{
+    <p class="vazio">Carregando...</p>
+}
+else
+{
+    <section class="cartao">
+        <p class="rotulo">Olá, @_perfil.Nome</p>
+        <h1>@_perfil.Cargo</h1>
+        <p class="rotulo">Nível de acesso @_perfil.Nivel · CPF @_perfil.CpfMascarado</p>
+    </section>
+
+    <section class="cartao">
+        <h2>Base de propriedades rurais com agrotóxicos proibidos</h2>
+        <ul class="niveis">
+            @foreach (var nivel in Niveis)
+            {
+                var liberado = _perfil.Nivel >= nivel.Numero;
+                <li class="@(liberado ? "liberado" : "bloqueado")">
+                    <div>
+                        <strong>Nível @nivel.Numero: @nivel.Titulo</strong>
+                        <small>@nivel.Descricao</small>
+                        <small class="estado">@(liberado ? (nivel.Numero == 1 ? "Aberto para você" : "Aberto para você, com o rosto") : "Acima do seu nível de acesso")</small>
+                    </div>
+                    <a class="botao @(liberado ? "" : "fantasma")" href="@($"dados/{nivel.Numero}")">Abrir</a>
+                </li>
+            }
+        </ul>
+        <p class="rotulo">Os níveis 2 e 3 pedem a confirmação do rosto a cada consulta. Tentar abrir um nível acima do seu fica registrado no relatório.</p>
+    </section>
+}
+
+@code {
+    private static readonly (int Numero, string Titulo, string Descricao)[] Niveis =
+    [
+        (1, "todos os servidores", "Município, estado, produto proibido e ano."),
+        (2, "diretores de divisão", "Mais: propriedade, quantidade aplicada e área."),
+        (3, "somente o ministro", "Mais: proprietário, multa e andamento da investigação."),
+    ];
+
+    private PerfilResponse? _perfil;
+    private string? _erro;
+
+    protected override async Task CarregarAsync()
+    {
+        var r = await Api.PerfilAsync();
+        if (r.Ok)
+        {
+            _perfil = r.Valor;
+        }
+        else
+        {
+            _erro = r.Erro!.Mensagem;
+        }
+    }
+}
