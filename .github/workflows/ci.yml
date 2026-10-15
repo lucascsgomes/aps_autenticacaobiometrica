@@ -35,7 +35,7 @@ jobs:
       - name: Testes (unitários e integração)
         run: dotnet test Ministerio.sln --configuration Release --no-build --logger "trx;LogFileName=resultado.trx"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: resultados-api
