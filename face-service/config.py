@@ -29,6 +29,9 @@ class ConfiguracaoProcessamento:
 LIMITE_IMAGEM_BYTES = 2 * 1024 * 1024
 LARGURA_MAXIMA_PX = 640
 LIMIAR_MINIMO, LIMIAR_MAXIMO = 0.300, 0.900
+MARGEM_MAXIMA = 0.500
+# Cada candidato ocupa cerca de 690 caracteres no formulário, e o corpo de um campo de texto não passa de 1 MB.
+LIMITE_CANDIDATOS = 1000
 
 
 def chaves_internas():

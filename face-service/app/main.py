@@ -1,4 +1,5 @@
 """Microserviço de reconhecimento facial. Stateless: não acessa banco e não grava imagem."""
+import json
 import uuid
 from contextlib import asynccontextmanager
 
@@ -7,18 +8,21 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app import embedding
-from app.esquemas import EnrollResposta, ProntoResposta, VerifyResposta, VivoResposta
+from app.esquemas import EnrollResposta, IdentifyResposta, ProntoResposta, VerifyResposta, VivoResposta
 from app.imagem import decodificar_imagem
 from app.seguranca import NaoAutorizado, exigir_chave_interna
 from biometria.comparacao import THRESHOLD_COSINE, comparar, corresponde
+from biometria.identificacao import MARGEM_PADRAO, identificar
 from biometria.pipeline import PipelineFacial
-from config import LIMIAR_MAXIMO, LIMIAR_MINIMO, LIMITE_IMAGEM_BYTES
+from config import LIMIAR_MAXIMO, LIMIAR_MINIMO, LIMITE_CANDIDATOS, LIMITE_IMAGEM_BYTES, MARGEM_MAXIMA
 from erros import ErroBiometria
 
 STATUS_POR_CODIGO = {
     'INVALID_IMAGE': 400,
     'INVALID_REFERENCE': 400,
     'INVALID_THRESHOLD': 400,
+    'INVALID_MARGIN': 400,
+    'INVALID_CANDIDATES': 400,
     'IMAGE_TOO_LARGE': 413,
     'NO_FACE_DETECTED': 422,
     'MULTIPLE_FACES': 422,
@@ -118,6 +122,51 @@ def verify(request: Request, image: UploadFile = File(...), reference_b64: str =
     score = comparar(pipeline.reconhecedor.modelo, referencia, vetor)
     return VerifyResposta(match=corresponde(score, limiar), score=round(score, 6), threshold=limiar,
                           request_id=request.state.request_id)
+
+
+@app.post('/internal/v1/face/identify', response_model=IdentifyResposta, dependencies=[Depends(exigir_chave_interna)])
+def identify(request: Request, image: UploadFile = File(...), candidates: str = Form(...),
+             threshold: float | None = Form(default=None), margin: float | None = Form(default=None),
+             pipeline: PipelineFacial = Depends(obter_pipeline)):
+    """1 para N: `candidates` é um JSON `[{"id": ..., "embedding_b64": ...}]`.
+    Só devolve o id quando há um vencedor claro."""
+    limiar = THRESHOLD_COSINE if threshold is None else threshold
+    if not LIMIAR_MINIMO <= limiar <= LIMIAR_MAXIMO:
+        raise ErroBiometria('Limiar fora da faixa permitida (0,300 a 0,900).', codigo='INVALID_THRESHOLD')
+    folga = MARGEM_PADRAO if margin is None else margin
+    if not 0 <= folga <= MARGEM_MAXIMA:
+        raise ErroBiometria('Margem fora da faixa permitida (0 a 0,500).', codigo='INVALID_MARGIN')
+    lista = _ler_candidatos(candidates)
+    imagem = decodificar_imagem(_ler_limitado(image))
+    vetor = pipeline.extrair_de_imagem(imagem)
+    r = identificar(pipeline.reconhecedor.modelo, lista, vetor, limiar, folga)
+    return IdentifyResposta(identified=r.identificado, candidate_id=r.candidato, score=round(r.score, 6),
+                            second_score=None if r.segundo_score is None else round(r.segundo_score, 6),
+                            ambiguous=r.ambiguo, threshold=limiar, margin=folga, candidates_compared=len(lista),
+                            request_id=request.state.request_id)
+
+
+def _ler_candidatos(texto: str):
+    erro = ErroBiometria('Candidatos inválidos: envie um JSON [{"id": "...", "embedding_b64": "..."}].',
+                         codigo='INVALID_CANDIDATES')
+    try:
+        bruto = json.loads(texto)
+    except ValueError as causa:
+        raise erro from causa
+    if not isinstance(bruto, list) or not 1 <= len(bruto) <= LIMITE_CANDIDATOS:
+        raise ErroBiometria(f'Envie de 1 a {LIMITE_CANDIDATOS} candidatos.', codigo='INVALID_CANDIDATES')
+    candidatos, vistos = [], set()
+    for item in bruto:
+        if not (isinstance(item, dict) and isinstance(item.get('id'), str)
+                and isinstance(item.get('embedding_b64'), str)):
+            raise erro
+        id_ = item['id']
+        if not 1 <= len(id_) <= 64 or id_ in vistos:
+            raise ErroBiometria('Cada id deve ter de 1 a 64 caracteres e não pode se repetir.',
+                                codigo='INVALID_CANDIDATES')
+        vistos.add(id_)
+        candidatos.append((id_, embedding.decodificar(item['embedding_b64'])))
+    return candidatos
 
 
 def _ler_limitado(arquivo: UploadFile) -> bytes:

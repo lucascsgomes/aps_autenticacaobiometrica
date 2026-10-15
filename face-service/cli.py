@@ -40,18 +40,18 @@ def executar():
     }
     print('Os cadastros ficam em memória somente enquanto este programa estiver aberto.')
     while True:
-        print('\n1 - Cadastrar\n2 - Autenticar\n0 - Sair')
+        print('\n1 - Cadastrar\n2 - Autenticar (1 para 1)\n3 - Identificar (1 para N)\n0 - Sair')
         escolha = input('Operação: ').strip()
         if escolha == '0':
             return
-        if escolha not in operacoes:
-            print('Opção inválida. Escolha 1, 2 ou 0.')
+        if escolha not in operacoes and escolha != '3':
+            print('Opção inválida. Escolha 1, 2, 3 ou 0.')
             continue
-        identificador = input('Identificador/nome da pessoa: ').strip()
+        identificador = input('Identificador/nome da pessoa: ').strip() if escolha != '3' else ''
         caminho = input('Caminho da imagem (qualquer nome de arquivo): ').strip()
         caminho = resolver_caminho_imagem(caminho)
         try:
-            resultado = operacoes[escolha](identificador, caminho)
+            resultado = sistema.identificar_pessoa(caminho) if escolha == '3' else operacoes[escolha](identificador, caminho)
             print(f'{resultado.mensagem} Identificador: {resultado.identificador}')
             if resultado.score is not None:
                 print(f'Score Cosine: {resultado.score:.6f}')

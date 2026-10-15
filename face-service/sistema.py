@@ -3,6 +3,8 @@ from pathlib import Path
 from banco.memoria import BancoMemoria, validar_identificador
 from biometria.pipeline import PipelineFacial
 from biometria.comparacao import comparar, corresponde
+from biometria.identificacao import identificar
+from erros import ErroBiometria
 
 
 @dataclass(frozen=True)
@@ -34,3 +36,15 @@ class SistemaBiometrico:
         aceita = corresponde(score)
         return Resultado(aceita, 'Autenticado.' if aceita else 'Não autenticado.',
                          validar_identificador(identificador), score, amostra.etapas)
+
+    def identificar_pessoa(self, caminho_imagem):
+        """1 para N: descobre quem é a pessoa da foto entre todas as cadastradas, sem informar identificador."""
+        candidatos = self._banco.todos()
+        if not candidatos:
+            raise ErroBiometria('Nenhuma pessoa cadastrada para comparar.')
+        amostra = self._pipeline.processar(caminho_imagem, 'identificacao', 'identificacao')
+        r = identificar(self._pipeline.reconhecedor.modelo, candidatos, amostra.caracteristicas)
+        if r.identificado:
+            return Resultado(True, 'Identificada.', r.candidato, r.score, amostra.etapas)
+        motivo = 'Resultado ambíguo entre duas pessoas parecidas.' if r.ambiguo else 'Ninguém cadastrado corresponde.'
+        return Resultado(False, f'Não identificada. {motivo}', None, r.score, amostra.etapas)

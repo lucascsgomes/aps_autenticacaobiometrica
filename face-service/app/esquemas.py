@@ -21,6 +21,21 @@ class VerifyResposta(BaseModel):
     request_id: str
 
 
+class IdentifyResposta(BaseModel):
+    identified: bool
+    candidate_id: str | None
+    score: float
+    second_score: float | None
+    ambiguous: bool
+    threshold: float
+    margin: float
+    candidates_compared: int
+    metric: str = 'cosine'
+    faces_detected: int = 1
+    model: str = MODELO
+    request_id: str
+
+
 class VivoResposta(BaseModel):
     status: str = 'vivo'
 

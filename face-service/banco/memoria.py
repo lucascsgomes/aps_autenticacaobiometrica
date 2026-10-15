@@ -26,3 +26,7 @@ class BancoMemoria:
         if identificador not in self._pessoas:
             raise ErroBiometria(f'Identificador não cadastrado: {identificador}')
         return self._pessoas[identificador]
+
+    def todos(self):
+        """Lista `(identificador, características)` de todas as pessoas cadastradas, para a identificação 1 para N."""
+        return [(identificador, amostra.caracteristicas) for identificador, amostra in self._pessoas.items()]

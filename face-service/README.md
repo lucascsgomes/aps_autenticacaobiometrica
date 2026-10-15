@@ -14,6 +14,7 @@ Serviço sem estado: não acessa banco e **não grava a imagem**. O vetor facial
 | `GET /internal/v1/ready` | `200` se YuNet e SFace carregaram, senão `503` | não |
 | `POST /internal/v1/face/enroll` | `image` (multipart) → vetor `embedding_b64` (128 floats) | `X-Internal-Key` |
 | `POST /internal/v1/face/verify` | `image` + `reference_b64` + `threshold` opcional → `match` e `score` | `X-Internal-Key` |
+| `POST /internal/v1/face/identify` | **1 para N.** `image` + `candidates` (JSON `[{"id", "embedding_b64"}]`, até 1000) + `threshold` e `margin` opcionais → `identified`, `candidate_id` (só se houver vencedor claro), `score`, `second_score` e `ambiguous` | sim |
 
 Para rodar localmente (Python 3.12, modelos já baixados em `modelos/` conforme os passos abaixo):
 
@@ -131,7 +132,8 @@ No menu:
 
 ```text
 1 - Cadastrar
-2 - Autenticar
+2 - Autenticar (1 para 1)
+3 - Identificar (1 para N)
 0 - Sair
 ```
 
@@ -139,7 +141,7 @@ Escolha `1`, digite o nome/identificador e o caminho da foto. Depois escolha `2`
 
 Use uma foto com exatamente um rosto visível. Se nenhum rosto for encontrado, o programa orientará a tirar outra foto de frente, com o rosto alinhado e próximo à câmera. Falhas internas mostram uma mensagem simples, sem detalhes técnicos no terminal; quando já existe uma pasta de etapas, o detalhe é mantido em `execucao.txt`. Identificadores distinguem maiúsculas de minúsculas; espaços externos são removidos. Duplicatas não sobrescrevem cadastros.
 
-**Os cadastros ficam apenas na memória enquanto o programa estiver aberto.** Ao sair, são perdidos. Para autenticar, é necessário cadastrar antes na mesma sessão. Arquivos em `resultados/` não são um banco de cadastros.
+**Os cadastros ficam apenas na memória enquanto o programa estiver aberto.** Ao sair, são perdidos. Para autenticar ou identificar, é necessário cadastrar antes na mesma sessão. A opção `3` não pede identificador: compara a foto com **todas** as pessoas cadastradas e diz quem é, ou recusa se ninguém corresponde ou se duas pessoas ficam parecidas demais (margem mínima de 0,05 entre a primeira e a segunda). Arquivos em `resultados/` não são um banco de cadastros.
 
 ## Configuração
 
