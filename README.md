@@ -182,18 +182,13 @@ No Linux e no macOS, troque `.\.venv\Scripts\python.exe` por `.venv/bin/python` 
 
 ## Publicação (link fixo)
 
-Três peças, todas em plano gratuito: o `face-service` no Hugging Face, a API no Render e a interface no GitHub Pages. O banco é o Neon, que já está na nuvem. A ordem importa, porque cada passo precisa do endereço do anterior.
+Tudo em plano gratuito: a API e o `face-service` no Render (dois serviços do mesmo `render.yaml`) e a interface no GitHub Pages. O banco é o Neon, que já está na nuvem. O `face-service` usa cerca de 200 MB de memória (medido com fotos reais), dentro dos 512 MB do plano grátis. A ordem importa, porque cada passo precisa do endereço do anterior.
 
-1. **face-service (Hugging Face Space).**
-   - Crie um Space com SDK **Docker**, público, em branco (por exemplo `face-service`).
-   - Em *Settings > Variables and secrets* do Space, crie o secret `FACE_INTERNAL_KEY` com um texto longo qualquer.
-   - Em *Settings > Access Tokens* do seu perfil, crie um token com permissão de escrita.
-   - No GitHub, em *Settings > Secrets and variables > Actions*, crie o secret `HF_TOKEN` (o token) e a variável `HF_SPACE` (`usuario/face-service`).
-   - Em *Actions*, rode "Publicar face-service no Hugging Face". O Space compila a imagem (baixa os modelos) e fica em `https://<usuario>-face-service.hf.space`; `/internal/v1/ready` deve responder `200`.
-2. **API (Render).** *New > Blueprint*, escolha este repositório (usa o `render.yaml`) e preencha os valores pedidos: `ConnectionStrings__Banco` (a connection string do Neon), `Biometria__ChaveCifra` (32 bytes em base64; `dotnet user-secrets list --project src/Banco.Api` mostra a do seu computador, use a mesma para manter os rostos já cadastrados), `Face__BaseUrl` (a URL do Space, sem barra no fim) e `Face__ChaveInterna` (o mesmo texto do `FACE_INTERNAL_KEY`). `Jwt__Chave` o Render sorteia. Anote a URL da API (`https://banco-api.onrender.com` ou parecida) e confira `/ready`.
-3. **Interface (GitHub Pages).** Em *Settings > Pages*, escolha *Source: GitHub Actions*. Crie a variável `API_URL` com a URL da API e rode "Publicar interface web". O site fica em `https://<usuario>.github.io/aps_autenticacaobiometrica/`. A origem do Pages já está liberada no CORS da API (`Cors__Origens__0` no `render.yaml`).
+1. **API e face-service (Render).** Crie a conta com o GitHub, depois *New > Blueprint*, escolha este repositório e preencha os dois valores pedidos: `ConnectionStrings__Banco` (a connection string do Neon) e `Biometria__ChaveCifra` (32 bytes em base64; `dotnet user-secrets list --project src/Banco.Api` mostra a do seu computador, use a mesma para manter os rostos já cadastrados). Clique em *Apply*; o Render constrói os dois serviços (uns 5 a 10 minutos). A chave entre os dois serviços (`FACE_INTERNAL_KEY`) o Render sorteia e copia sozinho.
+2. **Ligar a API ao face-service.** Abra o serviço `face-service` no painel do Render, copie a URL dele (`https://face-service-xxxx.onrender.com`) e confira que `/internal/v1/ready` responde `200`. No serviço `banco-api`, vá em *Environment* e crie `Face__BaseUrl` com essa URL, sem barra no fim; o Render reinicia a API. Anote a URL da API e confira `/ready`.
+3. **Interface (GitHub Pages).** Em *Settings > Pages* do repositório, escolha *Source: GitHub Actions*. Em *Settings > Secrets and variables > Actions > Variables*, crie `API_URL` com a URL da API e rode, em *Actions*, o workflow "Publicar interface web". O site fica em `https://<usuario>.github.io/aps_autenticacaobiometrica/`. A origem do Pages já está liberada no CORS da API (`Cors__Origens__0` no `render.yaml`).
 
-Os planos gratuitos dormem sem uso (o Render em 15 minutos, o Space depois de alguns dias) e a primeira chamada leva cerca de um minuto para acordar: abra `/health` da API e `/internal/v1/health` do Space antes da apresentação. Em produção o atalho `Auth:CadastroSemRosto` é ignorado, então todo cadastro termina com a foto.
+Os serviços do plano grátis dormem depois de 15 minutos sem uso, e acordar leva cerca de um minuto cada (a API acorda o face-service na primeira foto, então conte uns dois minutos). Antes da apresentação, abra `/health` da API e `/internal/v1/health` do face-service e espere responderem. Em produção o atalho `Auth:CadastroSemRosto` é ignorado, então todo cadastro termina com a foto.
 
 ## Integração contínua
 

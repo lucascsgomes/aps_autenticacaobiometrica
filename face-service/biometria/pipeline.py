@@ -1,3 +1,4 @@
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 import cv2
@@ -9,6 +10,10 @@ from processamento.tratamento_ruido import TRATAMENTOS_RUIDO
 from visualizacao.etapas import Etapas, EtapasNulas
 from biometria.detector import DetectorFacial
 from biometria.reconhecimento import ReconhecedorFacial
+
+# Os modelos do OpenCV guardam estado (YuNet muda o tamanho de entrada a cada foto) e não aguentam duas fotos ao mesmo tempo:
+# o FastAPI roda os endpoints em threads, então só uma foto por vez usa os modelos. A CPU é o gargalo de qualquer forma.
+_TRAVA_DOS_MODELOS = threading.Lock()
 
 
 @dataclass
@@ -79,17 +84,18 @@ class PipelineFacial:
             processada = TRATAMENTOS_RUIDO[self.configuracao.tratamento_ruido](pre)
             etapas.salvar('04_tratamento_ruido', processada)
         entrada = cv2.cvtColor(processada, cv2.COLOR_GRAY2BGR)
-        faces = self.detector.detectar(entrada)
-        etapas.salvar_deteccao(entrada, faces)
-        if len(faces) == 0:
-            raise ErroBiometria('Nenhum rosto encontrado. Tire outra foto de frente, com o rosto alinhado e próximo à câmera.',
-                                codigo='NO_FACE_DETECTED')
-        if len(faces) != 1:
-            raise ErroBiometria(f'Mais de uma face encontrada ({len(faces)}); é necessário exatamente um rosto.',
-                                codigo='MULTIPLE_FACES')
-        # A detecção e o alinhamento usam a mesma imagem, sem desenhos.
-        alinhado = self.reconhecedor.alinhar(entrada, faces[0])
-        etapas.salvar('06_rosto_alinhado', alinhado)
-        vetor = self.reconhecedor.extrair(alinhado)
+        with _TRAVA_DOS_MODELOS:
+            faces = self.detector.detectar(entrada)
+            etapas.salvar_deteccao(entrada, faces)
+            if len(faces) == 0:
+                raise ErroBiometria('Nenhum rosto encontrado. Tire outra foto de frente, com o rosto alinhado e próximo à câmera.',
+                                    codigo='NO_FACE_DETECTED')
+            if len(faces) != 1:
+                raise ErroBiometria(f'Mais de uma face encontrada ({len(faces)}); é necessário exatamente um rosto.',
+                                    codigo='MULTIPLE_FACES')
+            # A detecção e o alinhamento usam a mesma imagem, sem desenhos.
+            alinhado = self.reconhecedor.alinhar(entrada, faces[0])
+            etapas.salvar('06_rosto_alinhado', alinhado)
+            vetor = self.reconhecedor.extrair(alinhado)
         etapas.registrar('Extração concluída. Características mantidas somente em memória.')
         return vetor

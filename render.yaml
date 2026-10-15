@@ -1,4 +1,5 @@
-# Blueprint do Render para a API. Os valores marcados com sync: false são pedidos na criação e nunca ficam no repositório.
+# Blueprint do Render: a API e o reconhecimento facial, os dois no plano grátis (512 MB cada; o face-service usa cerca de 200 MB).
+# Os valores marcados com sync: false são pedidos na criação e nunca ficam no repositório.
 services:
   - type: web
     name: banco-api
@@ -14,9 +15,22 @@ services:
         generateValue: true
       - key: Biometria__ChaveCifra # 32 bytes em base64; perdeu a chave, perdeu os rostos cadastrados
         sync: false
-      - key: Face__BaseUrl # URL do Space do face-service, sem barra no fim
-        sync: false
-      - key: Face__ChaveInterna # a mesma FACE_INTERNAL_KEY configurada no Space
-        sync: false
+      - key: Face__ChaveInterna # a mesma chave do face-service, copiada dele
+        fromService:
+          type: web
+          name: face-service
+          envVarKey: FACE_INTERNAL_KEY
+      # Face__BaseUrl (a URL pública do face-service) entra à mão, depois do primeiro deploy: veja o README.
       - key: Cors__Origens__0 # origem da interface web (GitHub Pages), sem barra no fim
         value: https://lucascsgomes.github.io
+
+  - type: web
+    name: face-service
+    runtime: docker
+    dockerfilePath: ./face-service/Dockerfile
+    dockerContext: ./face-service
+    plan: free
+    healthCheckPath: /internal/v1/health
+    envVars:
+      - key: FACE_INTERNAL_KEY # sorteada pelo Render; sem ela as rotas biométricas respondem 401
+        generateValue: true
