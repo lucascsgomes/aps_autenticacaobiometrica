@@ -9,6 +9,7 @@ public enum EventoDeAcesso
     ConsultaNivel2,
     ConsultaNivel3,
     Relatorio,
+    AlteracaoDeAcesso,
 }
 
 public enum ResultadoDoAcesso
@@ -34,11 +35,14 @@ public sealed class RegistroDeAcesso
 
     public string? Ip { get; private set; }
 
+    /// <summary>Texto livre curto para quem lê o relatório (ex.: "Maria Souza: nível 1 para 2"). Nunca guarda foto, vetor nem score.</summary>
+    public string? Detalhe { get; private set; }
+
     private RegistroDeAcesso()
     {
     }
 
-    public static RegistroDeAcesso Criar(DateTimeOffset agora, Guid? usuarioId, EventoDeAcesso evento, ResultadoDoAcesso resultado, string? motivo, string? ip) => new()
+    public static RegistroDeAcesso Criar(DateTimeOffset agora, Guid? usuarioId, EventoDeAcesso evento, ResultadoDoAcesso resultado, string? motivo, string? ip, string? detalhe = null) => new()
     {
         OcorridoEm = agora,
         UsuarioId = usuarioId,
@@ -46,5 +50,6 @@ public sealed class RegistroDeAcesso
         Resultado = resultado,
         Motivo = motivo,
         Ip = ip,
+        Detalhe = detalhe,
     };
 }

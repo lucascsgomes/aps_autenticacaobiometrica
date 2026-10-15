@@ -19,10 +19,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
 
     public string? ConexaoForcada { get; init; }
 
-    /// <summary>CPFs válidos que a fábrica configura como ministro e diretor (o resto é servidor, nível 1).</summary>
-    public const string CpfDoMinistro = "52998224725";
-
-    public const string CpfDoDiretor = "11144477735";
+    /// <summary>CPF válido que a fábrica configura como admin (Admin:Cpfs). Quem promove os outros pelo painel; o resto nasce servidor, nível 1.</summary>
+    public const string CpfDoAdmin = "52998224725";
 
     public const string ChaveJwt = "chave-de-teste-com-mais-de-trinta-e-dois-bytes-123456";
 
@@ -38,8 +36,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("RateLimit:Fator", FatorDeLimite.ToString(System.Globalization.CultureInfo.InvariantCulture));
         builder.UseSetting("Jwt:Chave", ChaveJwt);
         builder.UseSetting("Biometria:ChaveCifra", Convert.ToBase64String(new byte[32].Select((_, i) => (byte)(i + 1)).ToArray()));
-        builder.UseSetting("Niveis:Ministro", CpfDoMinistro);
-        builder.UseSetting("Niveis:Diretores:0", CpfDoDiretor);
+        builder.UseSetting("Admin:Cpfs:0", CpfDoAdmin);
         builder.UseSetting("Auth:CadastroSemRosto", CadastroSemRosto ? "true" : "false");
         builder.ConfigureServices(s =>
         {

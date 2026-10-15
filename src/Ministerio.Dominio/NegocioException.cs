@@ -31,6 +31,14 @@ public sealed class NivelInsuficienteException(int exigido) : NegocioException("
 /// <summary>Os níveis restritos só abrem com o rosto: a senha não vale.</summary>
 public sealed class ExigeRostoException() : NegocioException("FACE_REQUIRED", "Este nível só abre com a confirmação do rosto.");
 
+/// <summary>Só admin abre o painel de acesso.</summary>
+public sealed class NaoEhAdminException() : NegocioException("ADMIN_REQUIRED", "Só um administrador pode fazer isso.");
+
+public sealed class UsuarioNaoEncontradoException() : NegocioException("USER_NOT_FOUND", "Usuário não encontrado.");
+
+/// <summary>Mudança que o sistema não permite (admin definido na configuração, ou tirar o próprio admin).</summary>
+public sealed class MudancaNaoPermitidaException(string mensagem) : NegocioException("CHANGE_NOT_ALLOWED", mensagem);
+
 public sealed class ConfirmacaoNecessariaException(string finalidade) : NegocioException("STEP_UP_REQUIRED", "Esta ação exige confirmação por rosto ou senha.")
 {
     public string Finalidade { get; } = finalidade;

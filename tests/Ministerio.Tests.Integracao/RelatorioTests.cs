@@ -22,6 +22,7 @@ public class RelatorioTests : IClassFixture<FaceEnrollTests.SemAtalho>
     }
 
     private static readonly SemaphoreSlim _trava = new(1, 1);
+    private static Titular? _admin;
     private static Titular? _ministro;
 
     private async Task<Titular> MinistroAsync()
@@ -29,7 +30,14 @@ public class RelatorioTests : IClassFixture<FaceEnrollTests.SemAtalho>
         await _trava.WaitAsync();
         try
         {
-            return _ministro ??= await _cliente.NovoTitularComRostoAsync(ApiFactory.CpfDoMinistro);
+            if (_ministro is null)
+            {
+                _admin ??= await _cliente.NovoTitularComRostoAsync(ApiFactory.CpfDoAdmin);
+                _ministro = await _cliente.NovoTitularComRostoAsync();
+                await _cliente.DefinirNivelAsync(_admin, _ministro, 3);
+            }
+
+            return _ministro;
         }
         finally
         {

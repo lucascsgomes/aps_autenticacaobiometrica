@@ -21,6 +21,12 @@ public sealed partial class Usuario
     public string Email { get; private set; } = default!;
     public string? Celular { get; private set; }
     public string SenhaHash { get; private set; } = default!;
+
+    /// <summary>Nível de acesso à base: 1 servidor, 2 diretor, 3 ministro. Quem muda é um admin, com o rosto.</summary>
+    public int Nivel { get; private set; } = Acesso.Niveis.Servidor;
+
+    /// <summary>Pode abrir o painel e mudar o nível e o perfil de admin dos outros.</summary>
+    public bool Admin { get; private set; }
     public StatusUsuario Status { get; private set; }
     public DateTimeOffset? CadastroConcluidoEm { get; private set; }
     public DateTimeOffset? ConsentimentoBiometricoEm { get; private set; }
@@ -122,6 +128,19 @@ public sealed partial class Usuario
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(senhaHash);
         SenhaHash = senhaHash;
+        AtualizadoEm = agora;
+    }
+
+    /// <summary>Muda só o que veio preenchido. Nível fora de 1 a 3 é recusado.</summary>
+    public void DefinirAcesso(int? nivel, bool? admin, DateTimeOffset agora)
+    {
+        if (nivel is < Acesso.Niveis.Servidor or > Acesso.Niveis.Ministro)
+        {
+            throw new ArgumentOutOfRangeException(nameof(nivel), "O nível vai de 1 a 3.");
+        }
+
+        Nivel = nivel ?? Nivel;
+        Admin = admin ?? Admin;
         AtualizadoEm = agora;
     }
 

@@ -46,7 +46,7 @@ internal static class DadosEndpoints
         HttpContext http,
         ClaimsPrincipal usuario,
         MinisterioDbContext db,
-        ServicoDeNiveis niveis,
+        ServicoDeAdmins admins,
         ServicoDeStepUp stepUp,
         ServicoDeAuditoria auditoria,
         CancellationToken cancelamento)
@@ -61,7 +61,7 @@ internal static class DadosEndpoints
         var finalidade = Niveis.FinalidadeDoAcesso(nivel)!.Value;
         try
         {
-            if (await db.ObterAsync(niveis, usuarioId, cancelamento) < nivel)
+            if ((await db.ObterAsync(admins, usuarioId, cancelamento)).Nivel < nivel)
             {
                 throw new NivelInsuficienteException(nivel);
             }

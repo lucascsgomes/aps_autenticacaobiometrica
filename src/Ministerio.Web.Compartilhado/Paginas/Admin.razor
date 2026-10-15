@@ -1,0 +1,183 @@
+@page "/admin"
+@inherits PaginaProtegida
+
+<h1>Painel de acesso</h1>
+
+@if (!Autenticado)
+{
+    <p class="vazio">Carregando...</p>
+}
+else if (_usuarios is null)
+{
+    <p class="@(_erroDaLista is null ? "vazio" : "aviso erro")" role="@(_erroDaLista is null ? null : "alert")">@(_erroDaLista ?? "Carregando...")</p>
+}
+else
+{
+    <p class="rotulo">Mude o nível de acesso (1 servidor, 2 diretor, 3 ministro) e quem é administrador. Cada mudança pede o seu rosto e fica no relatório.</p>
+
+    @if (_aviso is not null)
+    {
+        <p class="aviso ok" role="status">@_aviso</p>
+    }
+
+    @if (_editando is not null)
+    {
+        <section class="cartao largo">
+            <h2>@_editando.Nome</h2>
+            @if (!_confirmando)
+            {
+                <label>Nível de acesso
+                    <select @bind="_nivel">
+                        <option value="1">1: Servidor</option>
+                        <option value="2">2: Diretor de divisão</option>
+                        <option value="3">3: Ministro do Meio Ambiente</option>
+                    </select>
+                </label>
+                <label class="marcar">
+                    <input type="checkbox" @bind="_admin" disabled="@(_editando.AdminFixo || (_editando.EhVoce && _editando.Admin))" />
+                    <span>Administrador (abre este painel)@(_editando.AdminFixo ? ". Definido na configuração do servidor, não dá para tirar." : _editando.EhVoce && _editando.Admin ? ". Você não pode tirar o seu próprio perfil." : "")</span>
+                </label>
+                @if (_erro is not null)
+                {
+                    <p class="aviso erro" role="alert">@_erro</p>
+                }
+                <div class="acoes">
+                    <button type="button" @onclick="Continuar">Continuar</button>
+                    <button type="button" class="secundario" @onclick="Cancelar">Cancelar</button>
+                </div>
+            }
+            else
+            {
+                <Confirmacao Texto="Mostre o rosto para confirmar a mudança."
+                             SoRosto="true"
+                             PermiteRosto="true"
+                             Ocupado="_ocupado"
+                             Erro="@_erro"
+                             OnConfirmar="ConfirmarAsync"
+                             OnCancelar="Cancelar" />
+            }
+        </section>
+    }
+
+    <label>Buscar por nome
+        <input @bind="_filtro" @bind:event="oninput" placeholder="Nome" autocomplete="off" />
+    </label>
+
+    <div class="tabela">
+        <table>
+            <thead>
+                <tr><th>Nome</th><th>CPF</th><th>Nível</th><th>Admin</th><th>Rosto</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var u in Filtrados())
+                {
+                    <tr>
+                        <td>@u.Nome@(u.EhVoce ? " (você)" : "")</td>
+                        <td>@u.CpfMascarado</td>
+                        <td>@u.Nivel: @u.Cargo</td>
+                        <td>@(u.Admin ? (u.AdminFixo ? "Sim (fixo)" : "Sim") : "Não")</td>
+                        <td>@(u.TemRosto ? "Sim" : "Não")</td>
+                        <td>
+                            @if (u.Status == "ATIVO")
+                            {
+                                <button type="button" class="link" disabled="@_ocupado" @onclick="() => Editar(u)">Alterar</button>
+                            }
+                            else
+                            {
+                                <span class="rotulo">cadastro pendente</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (!Filtrados().Any())
+    {
+        <p class="vazio">Ninguém encontrado.</p>
+    }
+}
+
+@code {
+    private List<UsuarioAdminDto>? _usuarios;
+    private UsuarioAdminDto? _editando;
+    private string _filtro = "";
+    private int _nivel;
+    private bool _admin;
+    private bool _confirmando;
+    private bool _ocupado;
+    private string? _erro;
+    private string? _erroDaLista;
+    private string? _aviso;
+
+    protected override Task CarregarAsync() => RecarregarAsync();
+
+    private async Task RecarregarAsync()
+    {
+        var r = await Api.UsuariosAdminAsync();
+        if (r.Ok)
+        {
+            _usuarios = r.Valor;
+        }
+        else
+        {
+            _erroDaLista = r.Erro!.Mensagem;
+        }
+    }
+
+    private IEnumerable<UsuarioAdminDto> Filtrados() =>
+        (_usuarios ?? []).Where(u => string.IsNullOrWhiteSpace(_filtro) || u.Nome.Contains(_filtro.Trim(), StringComparison.CurrentCultureIgnoreCase));
+
+    private void Editar(UsuarioAdminDto usuario)
+    {
+        _editando = usuario;
+        (_nivel, _admin) = (usuario.Nivel, usuario.Admin);
+        _confirmando = false;
+        _erro = null;
+        _aviso = null;
+    }
+
+    private void Cancelar()
+    {
+        _editando = null;
+        _confirmando = false;
+        _erro = null;
+    }
+
+    private void Continuar()
+    {
+        if (_nivel == _editando!.Nivel && _admin == _editando.Admin)
+        {
+            _erro = "Nada mudou.";
+            return;
+        }
+
+        _erro = null;
+        _confirmando = true;
+    }
+
+    private async Task ConfirmarAsync(Credencial credencial)
+    {
+        _ocupado = true;
+        _erro = null;
+        try
+        {
+            var alvo = _editando!;
+            var r = await Api.AlterarAcessoAsync(alvo.Id, _nivel == alvo.Nivel ? null : _nivel, _admin == alvo.Admin ? null : _admin, credencial.Imagem!);
+            if (r.Ok)
+            {
+                _aviso = $"Acesso de {alvo.Nome} atualizado.";
+                Cancelar();
+                await RecarregarAsync();
+            }
+            else
+            {
+                _erro = r.Erro!.Mensagem;
+            }
+        }
+        finally
+        {
+            _ocupado = false;
+        }
+    }
+}

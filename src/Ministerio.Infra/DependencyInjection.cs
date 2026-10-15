@@ -38,7 +38,7 @@ public static class DependencyInjection
             configuracao.GetValue("Biometria:LimiarNivel3", 0.500m),
             configuracao.GetValue("Biometria:Margem", 0.05m)));
         servicos.AddScoped<ServicoDeIdentificacao>();
-        servicos.AddSingleton<ServicoDeNiveis>();
+        servicos.AddSingleton<ServicoDeAdmins>();
         servicos.AddScoped<ServicoDeAuditoria>();
 
         AdicionarFacial(servicos, configuracao);

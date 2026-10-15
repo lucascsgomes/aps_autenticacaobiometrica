@@ -406,6 +406,11 @@ namespace Ministerio.Infra.Persistencia.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
 
+                    b.Property<string>("Detalhe")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("detalhe");
+
                     b.Property<string>("Evento")
                         .IsRequired()
                         .HasColumnType("text")
@@ -444,7 +449,7 @@ namespace Ministerio.Infra.Persistencia.Migrations
 
                     b.ToTable("registros_de_acesso", null, t =>
                         {
-                            t.HasCheckConstraint("ck_acesso_evento", "evento IN ('LOGIN_SENHA', 'LOGIN_ROSTO', 'LOGIN_IDENTIFICACAO', 'CONSULTA_NIVEL1', 'CONSULTA_NIVEL2', 'CONSULTA_NIVEL3', 'RELATORIO')");
+                            t.HasCheckConstraint("ck_acesso_evento", "evento IN ('LOGIN_SENHA', 'LOGIN_ROSTO', 'LOGIN_IDENTIFICACAO', 'CONSULTA_NIVEL1', 'CONSULTA_NIVEL2', 'CONSULTA_NIVEL3', 'RELATORIO', 'ALTERACAO_DE_ACESSO')");
 
                             t.HasCheckConstraint("ck_acesso_motivo", "(resultado = 'RECUSADO') = (motivo IS NOT NULL)");
 
@@ -526,7 +531,7 @@ namespace Ministerio.Infra.Persistencia.Migrations
 
                             t.HasCheckConstraint("ck_desafio_devolvido", "devolvido_vezes BETWEEN 0 AND 5");
 
-                            t.HasCheckConstraint("ck_desafio_finalidade", "finalidade IN ('CADASTRO', 'LOGIN', 'ACESSO_NIVEL2', 'ACESSO_NIVEL3', 'TROCAR_SENHA', 'RECADASTRO')");
+                            t.HasCheckConstraint("ck_desafio_finalidade", "finalidade IN ('CADASTRO', 'LOGIN', 'ACESSO_NIVEL2', 'ACESSO_NIVEL3', 'TROCAR_SENHA', 'RECADASTRO', 'ALTERAR_ACESSO')");
 
                             t.HasCheckConstraint("ck_desafio_hash", "hash_operacao IS NULL OR octet_length(hash_operacao) = 32");
 
@@ -667,6 +672,12 @@ namespace Ministerio.Infra.Persistencia.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<bool>("Admin")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("admin");
+
                     b.Property<DateTimeOffset>("AtualizadoEm")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("atualizado_em");
@@ -704,6 +715,12 @@ namespace Ministerio.Infra.Persistencia.Migrations
                     b.Property<short>("FalhasConsecutivas")
                         .HasColumnType("smallint")
                         .HasColumnName("falhas_consecutivas");
+
+                    b.Property<short>("Nivel")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)1)
+                        .HasColumnName("nivel");
 
                     b.Property<string>("Nome")
                         .IsRequired()
@@ -748,6 +765,8 @@ namespace Ministerio.Infra.Persistencia.Migrations
                             t.HasCheckConstraint("ck_usuarios_email", "email = lower(email) AND email ~ '^[^@\\s]+@[^@\\s]+$'");
 
                             t.HasCheckConstraint("ck_usuarios_falhas", "falhas_consecutivas >= 0");
+
+                            t.HasCheckConstraint("ck_usuarios_nivel", "nivel BETWEEN 1 AND 3");
 
                             t.HasCheckConstraint("ck_usuarios_nome", "length(btrim(nome)) BETWEEN 3 AND 120");
 

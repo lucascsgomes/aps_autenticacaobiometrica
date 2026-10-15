@@ -52,7 +52,7 @@ a { color: var(--marca); }
 .topo nav { display: flex; gap: 16px; align-items: center; }
 .marca { font-weight: 700; text-decoration: none; color: var(--marca); }
 
-main { max-width: 640px; margin: 0 auto; padding: 12px 16px; }
+main { max-width: 960px; margin: 0 auto; padding: 12px 16px; }
 
 .cartao {
     background: var(--superficie);
@@ -60,9 +60,12 @@ main { max-width: 640px; margin: 0 auto; padding: 12px 16px; }
     border-radius: 12px;
     padding: 20px;
     margin-bottom: 16px;
+    max-width: 640px;
+    margin-inline: auto;
 }
 
 .estreito { max-width: 440px; margin-inline: auto; }
+.cartao.largo { max-width: none; }
 h1 { font-size: 1.5rem; margin: 0 0 16px; }
 h2 { font-size: 1.1rem; margin: 0 0 12px; }
 

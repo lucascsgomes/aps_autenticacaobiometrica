@@ -8,6 +8,8 @@ using Ministerio.Dominio.Biometria;
 using Ministerio.Infra.Acesso;
 using Ministerio.Infra.Autenticacao;
 using Ministerio.Infra.Persistencia;
+using Microsoft.AspNetCore.Http.Json;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 
 namespace Ministerio.Api.Endpoints;
@@ -31,8 +33,9 @@ internal static class StepUpEndpoints
         ClaimsPrincipal usuario,
         ServicoDeStepUp stepUp,
         MinisterioDbContext db,
-        ServicoDeNiveis niveis,
+        ServicoDeAdmins admins,
         ServicoDeAuditoria auditoria,
+        IOptions<JsonOptions> json,
         CancellationToken cancelamento)
     {
         if (!Guid.TryParse(usuario.FindFirstValue(JwtRegisteredClaimNames.Sub), out var usuarioId))
@@ -42,6 +45,7 @@ internal static class StepUpEndpoints
 
         FinalidadeDoDesafio finalidade;
         string instrucao;
+        var canonico = AcoesSensiveis.SemParametros;
         switch (corpo?.Finalidade)
         {
             case "ACESSO_NIVEL_2":
@@ -56,21 +60,37 @@ internal static class StepUpEndpoints
             case "RECADASTRO":
                 (finalidade, instrucao) = (FinalidadeDoDesafio.Recadastro, "Confirme com o rosto atual ou com a senha a troca do rosto.");
                 break;
+            case "ALTERAR_ACESSO":
+                var parametros = corpo.Parametros is { ValueKind: JsonValueKind.Object } p ? p.GetRawText() : null;
+                var pedido = Ler<AlterarAcessoRequest>(parametros, json.Value.SerializerOptions);
+                var errosDoPedido = AcoesSensiveis.ErrosDoAcesso(pedido);
+                if (errosDoPedido.Count > 0)
+                {
+                    return Validacao.Problema(errosDoPedido);
+                }
+
+                (finalidade, instrucao, canonico) = (FinalidadeDoDesafio.AlterarAcesso, "Mostre o rosto para confirmar a mudança de acesso.", AcoesSensiveis.Canonico(pedido!.UsuarioId!.Value, pedido.Nivel, pedido.Admin));
+                break;
             default:
-                return Validacao.Problema(new Dictionary<string, string[]> { ["finalidade"] = ["Use ACESSO_NIVEL_2, ACESSO_NIVEL_3, TROCAR_SENHA ou RECADASTRO."] });
+                return Validacao.Problema(new Dictionary<string, string[]> { ["finalidade"] = ["Use ACESSO_NIVEL_2, ACESSO_NIVEL_3, TROCAR_SENHA, RECADASTRO ou ALTERAR_ACESSO."] });
         }
 
         if (finalidade is FinalidadeDoDesafio.AcessoNivel2 or FinalidadeDoDesafio.AcessoNivel3)
         {
             var exigido = finalidade == FinalidadeDoDesafio.AcessoNivel3 ? Niveis.Ministro : Niveis.Diretor;
-            if (await db.ObterAsync(niveis, usuarioId, cancelamento) < exigido)
+            if ((await db.ObterAsync(admins, usuarioId, cancelamento)).Nivel < exigido)
             {
                 await auditoria.RegistrarAsync(usuarioId, EventoDaConsulta(exigido), ResultadoDoAcesso.Recusado, "NIVEL_INSUFICIENTE", http.Connection.RemoteIpAddress);
                 throw new NivelInsuficienteException(exigido);
             }
         }
 
-        var desafio = await stepUp.AbrirAsync(usuarioId, finalidade, AcoesSensiveis.SemParametros, http.Connection.RemoteIpAddress, cancelamento);
+        if (finalidade == FinalidadeDoDesafio.AlterarAcesso && !(await db.ObterAsync(admins, usuarioId, cancelamento)).Admin)
+        {
+            throw new NaoEhAdminException();
+        }
+
+        var desafio = await stepUp.AbrirAsync(usuarioId, finalidade, canonico, http.Connection.RemoteIpAddress, cancelamento);
         return Results.Json(new DesafioDeAcaoResponse(desafio.Id, Codigo.De(finalidade), desafio.ExpiraEm, instrucao), statusCode: StatusCodes.Status201Created);
     }
 
@@ -123,8 +143,45 @@ internal static class StepUpEndpoints
     }
 }
 
-/// <summary>As ações sensíveis daqui não levam parâmetros: o desafio fica amarrado só ao usuário e à finalidade.</summary>
+/// <summary>Canônico das ações sensíveis: sem parâmetros (só dono e finalidade) ou com o usuário-alvo e os valores pedidos.</summary>
 internal static class AcoesSensiveis
 {
     public const string SemParametros = "{}";
+
+    public static Dictionary<string, string[]> ErrosDoAcesso(AlterarAcessoRequest? pedido)
+    {
+        var erros = new Dictionary<string, string[]>();
+        if (pedido?.UsuarioId is null)
+        {
+            erros["usuario_id"] = ["Informe o usuário."];
+        }
+
+        if (pedido is { Nivel: null, Admin: null })
+        {
+            erros["corpo"] = ["Informe o nível, o perfil de admin ou os dois."];
+        }
+        else if (pedido?.Nivel is < Niveis.Servidor or > Niveis.Ministro)
+        {
+            erros["nivel"] = ["Use 1, 2 ou 3."];
+        }
+
+        return erros;
+    }
+
+    /// <summary>JSON com as chaves em ordem e só o que foi pedido: é o que entra no hash do desafio, no pedido e na confirmação.</summary>
+    public static string Canonico(Guid usuarioId, int? nivel, bool? admin)
+    {
+        var campos = new SortedDictionary<string, object>(StringComparer.Ordinal) { ["usuario_id"] = usuarioId.ToString() };
+        if (nivel is { } n)
+        {
+            campos["nivel"] = n;
+        }
+
+        if (admin is { } a)
+        {
+            campos["admin"] = a;
+        }
+
+        return JsonSerializer.Serialize(campos);
+    }
 }

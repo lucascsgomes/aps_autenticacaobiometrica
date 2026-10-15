@@ -1,6 +1,6 @@
 namespace Ministerio.Contratos;
 
-public sealed record PerfilResponse(Guid Id, string Nome, string CpfMascarado, int Nivel, string Cargo, bool TemRosto);
+public sealed record PerfilResponse(Guid Id, string Nome, string CpfMascarado, int Nivel, string Cargo, bool TemRosto, bool Admin);
 
 /// <summary>
 /// Um registro da base ambiental. O servidor só preenche os campos do nível consultado: município, UF, produto e ano no nível 1;
@@ -24,7 +24,7 @@ public sealed record DadosResponse(int Nivel, IReadOnlyList<PropriedadeDto> Iten
 
 public sealed record ContagemDto(string Nome, int Total);
 
-public sealed record AcessoDto(DateTimeOffset Quando, string? Usuario, string Evento, string Resultado, string? Motivo, string? Ip);
+public sealed record AcessoDto(DateTimeOffset Quando, string? Usuario, string Evento, string Resultado, string? Motivo, string? Ip, string? Detalhe);
 
 /// <summary>Relatório de segurança. <c>TentativasIndevidas</c> são pedidos de um nível acima do que a pessoa tem.</summary>
 public sealed record RelatorioResponse(
@@ -35,3 +35,23 @@ public sealed record RelatorioResponse(
     IReadOnlyList<ContagemDto> PorEvento,
     IReadOnlyList<ContagemDto> PorMotivo,
     IReadOnlyList<AcessoDto> Recentes);
+
+/// <summary>
+/// O que o admin quer mudar num usuário: nível (1 a 3), perfil de admin, ou os dois. Só o que vier preenchido muda.
+/// Vai igual no pedido do desafio e no da mudança: o rosto confirmado vale para este usuário e estes valores, e mais nada.
+/// </summary>
+public sealed record AlterarAcessoRequest(Guid? UsuarioId, int? Nivel, bool? Admin);
+
+/// <summary><c>AdminFixo</c>: admin definido na configuração do servidor, que o painel não tira. <c>EhVoce</c>: é o próprio admin que está olhando.</summary>
+public sealed record UsuarioAdminDto(
+    Guid Id,
+    string Nome,
+    string CpfMascarado,
+    int Nivel,
+    string Cargo,
+    bool TemRosto,
+    bool Admin,
+    bool AdminFixo,
+    string Status,
+    DateTimeOffset CriadoEm,
+    bool EhVoce);

@@ -18,7 +18,7 @@ else
     <section class="cartao">
         <p class="rotulo">Olá, @_perfil.Nome</p>
         <h1>@_perfil.Cargo</h1>
-        <p class="rotulo">Nível de acesso @_perfil.Nivel · CPF @_perfil.CpfMascarado</p>
+        <p class="rotulo">Nível de acesso @_perfil.Nivel · CPF @_perfil.CpfMascarado@(_perfil.Admin ? " · Administrador" : "")</p>
     </section>
 
     <section class="cartao">

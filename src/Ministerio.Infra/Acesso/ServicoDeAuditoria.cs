@@ -8,11 +8,11 @@ namespace Ministerio.Infra.Acesso;
 /// <summary>Grava cada tentativa de acesso, aceita ou recusada, para o relatório de segurança. Nunca grava foto, vetor nem score.</summary>
 public sealed class ServicoDeAuditoria(MinisterioDbContext db, TimeProvider relogio)
 {
-    public async Task RegistrarAsync(Guid? usuarioId, EventoDeAcesso evento, ResultadoDoAcesso resultado, string? motivo, IPAddress? ip)
+    public async Task RegistrarAsync(Guid? usuarioId, EventoDeAcesso evento, ResultadoDoAcesso resultado, string? motivo, IPAddress? ip, string? detalhe = null)
     {
         // A tentativa pode ter falhado no meio de uma gravação: limpa o contexto para o registro não herdar a sujeira.
         db.ChangeTracker.Clear();
-        db.Acessos.Add(RegistroDeAcesso.Criar(relogio.GetUtcNow(), usuarioId, evento, resultado, motivo, ip?.ToString()));
+        db.Acessos.Add(RegistroDeAcesso.Criar(relogio.GetUtcNow(), usuarioId, evento, resultado, motivo, ip?.ToString(), detalhe));
         await db.SaveChangesAsync(CancellationToken.None);
     }
 

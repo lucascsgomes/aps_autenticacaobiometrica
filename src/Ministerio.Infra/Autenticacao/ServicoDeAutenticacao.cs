@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Ministerio.Infra.Autenticacao;
 
 /// <summary>Quem acabou de entrar. O access token (JWT) é emitido pela API a partir disto.</summary>
-public sealed record SessaoEmitida(Guid UsuarioId, string Nome, string Cpf, string RefreshToken);
+public sealed record SessaoEmitida(Guid UsuarioId, string Nome, string Cpf, int Nivel, bool Admin, string RefreshToken);
 
 public sealed class ServicoDeAutenticacao(
     MinisterioDbContext db,
@@ -47,14 +47,14 @@ public sealed class ServicoDeAutenticacao(
         usuario.RegistrarCredencialCorreta(agora);
         var token = refresh.NovaFamilia(usuario.Id);
         await db.SaveChangesAsync(cancelamento);
-        return new SessaoEmitida(usuario.Id, usuario.Nome, usuario.Cpf, token);
+        return new SessaoEmitida(usuario.Id, usuario.Nome, usuario.Cpf, usuario.Nivel, usuario.Admin, token);
     }
 
     public async Task<SessaoEmitida> RenovarAsync(string refreshToken, CancellationToken cancelamento = default)
     {
         var (novo, usuarioId) = await refresh.RotacionarAsync(refreshToken, cancelamento);
-        var dados = await db.Usuarios.Where(u => u.Id == usuarioId).Select(u => new { u.Nome, u.Cpf }).SingleAsync(cancelamento);
-        return new SessaoEmitida(usuarioId, dados.Nome, dados.Cpf, novo);
+        var dados = await db.Usuarios.Where(u => u.Id == usuarioId).Select(u => new { u.Nome, u.Cpf, u.Nivel, u.Admin }).SingleAsync(cancelamento);
+        return new SessaoEmitida(usuarioId, dados.Nome, dados.Cpf, dados.Nivel, dados.Admin, novo);
     }
 
     public Task SairAsync(string refreshToken, CancellationToken cancelamento = default) =>

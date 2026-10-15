@@ -11,7 +11,7 @@ internal sealed class DesafioBiometricoConfiguration : IEntityTypeConfiguration<
     {
         d.ToTable("desafios_biometricos", t =>
         {
-            t.HasCheckConstraint("ck_desafio_finalidade", "finalidade IN ('CADASTRO', 'LOGIN', 'ACESSO_NIVEL2', 'ACESSO_NIVEL3', 'TROCAR_SENHA', 'RECADASTRO')");
+            t.HasCheckConstraint("ck_desafio_finalidade", "finalidade IN ('CADASTRO', 'LOGIN', 'ACESSO_NIVEL2', 'ACESSO_NIVEL3', 'TROCAR_SENHA', 'RECADASTRO', 'ALTERAR_ACESSO')");
             t.HasCheckConstraint("ck_desafio_metodo_valor", "metodo IN ('FACE', 'SENHA')");
             t.HasCheckConstraint("ck_desafio_nonce", "octet_length(nonce) = 32");
             t.HasCheckConstraint("ck_desafio_hash", "hash_operacao IS NULL OR octet_length(hash_operacao) = 32");

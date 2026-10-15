@@ -12,6 +12,7 @@ public enum FinalidadeDoDesafio
     AcessoNivel3,
     TrocarSenha,
     Recadastro,
+    AlterarAcesso,
 }
 
 public enum MetodoDoDesafio

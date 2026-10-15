@@ -55,6 +55,7 @@ app.MapearStepUp();
 app.MapearCredenciais();
 app.MapearDados();
 app.MapearRelatorios();
+app.MapearAdmin();
 
 app.Run();
 

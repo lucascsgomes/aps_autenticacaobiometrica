@@ -19,7 +19,7 @@
 
     <div class="acoes">
         <button type="button" disabled="@(Ocupado || (_rosto && !_cameraPronta))" @onclick="ConfirmarAsync">@(Ocupado ? "Confirmando..." : "Confirmar")</button>
-        @if (PermiteRosto)
+        @if (PermiteRosto && !SoRosto)
         {
             <button type="button" class="secundario" disabled="@Ocupado" @onclick="Alternar">@(_rosto ? "Usar a senha" : "Usar o rosto")</button>
         }
@@ -43,6 +43,10 @@
     [Parameter]
     public bool PermiteRosto { get; set; }
 
+    /// <summary>Só o rosto vale (sem o botão de usar a senha): para o que a senha não pode confirmar.</summary>
+    [Parameter]
+    public bool SoRosto { get; set; }
+
     [Parameter]
     public bool Ocupado { get; set; }
 
@@ -54,6 +58,8 @@
 
     [Parameter]
     public EventCallback OnCancelar { get; set; }
+
+    protected override void OnInitialized() => _rosto = SoRosto;
 
     private void Alternar()
     {

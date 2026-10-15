@@ -21,9 +21,7 @@ services:
           type: web
           name: face-service
           envVarKey: FACE_INTERNAL_KEY
-      - key: Niveis__Ministro # CPF do ministro (só dígitos): é o único que abre o nível 3 e lê o relatório
-        sync: false
-      - key: Niveis__Diretores__0 # CPF de um diretor de divisão (nível 2); para mais, crie Niveis__Diretores__1, __2... no painel
+      - key: Admin__Cpfs__0 # CPF (só dígitos) do administrador fixo: ele muda níveis e admins no painel; para mais, crie Admin__Cpfs__1, __2... no painel
         sync: false
       # Face__BaseUrl (a URL pública do face-service) entra à mão, depois do primeiro deploy: veja o README.
       - key: Cors__Origens__0 # origem da interface web (GitHub Pages), sem barra no fim

@@ -9,40 +9,71 @@ namespace Ministerio.Tests;
 
 public class NiveisTests
 {
-    private static ServicoDeNiveis Servico(string? ministro, params string[] diretores)
+    private static ServicoDeAdmins Servico(params string[] admins)
     {
-        var dados = new Dictionary<string, string?>();
-        if (ministro is not null)
-        {
-            dados["Niveis:Ministro"] = ministro;
-        }
+        var dados = admins.Select((cpf, i) => ($"Admin:Cpfs:{i}", (string?)cpf)).ToDictionary(p => p.Item1, p => p.Item2);
+        return new ServicoDeAdmins(new ConfigurationBuilder().AddInMemoryCollection(dados).Build());
+    }
 
-        for (var i = 0; i < diretores.Length; i++)
-        {
-            dados[$"Niveis:Diretores:{i}"] = diretores[i];
-        }
+    private static Usuario NovoUsuario() =>
+        Usuario.Cadastrar("Ana Souza", "52998224725", "ana@exemplo.com", null, "hash", DateTimeOffset.UtcNow);
 
-        return new ServicoDeNiveis(new ConfigurationBuilder().AddInMemoryCollection(dados).Build());
+    [Fact]
+    public void Admin_da_configuracao_e_fixo_e_sempre_admin()
+    {
+        var servico = Servico("11111111111", "22222222222");
+
+        Assert.True(servico.Fixo("11111111111"));
+        Assert.True(servico.EhAdmin("22222222222", adminNoBanco: false));
+        Assert.False(servico.Fixo("33333333333"));
+        Assert.False(servico.EhAdmin("33333333333", adminNoBanco: false));
     }
 
     [Fact]
-    public void Cada_cpf_cai_no_nivel_da_lista_em_que_esta_e_o_resto_e_servidor()
+    public void Admin_do_banco_vale_mesmo_fora_da_configuracao_mas_nao_e_fixo()
     {
-        var servico = Servico("11111111111", "22222222222", "33333333333");
+        var servico = Servico("11111111111");
 
-        Assert.Equal(Niveis.Ministro, servico.De("11111111111"));
-        Assert.Equal(Niveis.Diretor, servico.De("22222222222"));
-        Assert.Equal(Niveis.Diretor, servico.De("33333333333"));
-        Assert.Equal(Niveis.Servidor, servico.De("44444444444"));
+        Assert.True(servico.EhAdmin("33333333333", adminNoBanco: true));
+        Assert.False(servico.Fixo("33333333333"));
     }
 
     [Fact]
-    public void Sem_nada_configurado_ninguem_e_ministro_nem_diretor()
+    public void Sem_nada_configurado_ninguem_e_admin_pela_configuracao_e_cpf_vazio_nao_conta()
     {
-        var servico = Servico(null);
+        var servico = Servico(string.Empty, "  ");
 
-        Assert.Equal(Niveis.Servidor, servico.De("11111111111"));
-        Assert.Equal(Niveis.Servidor, servico.De(string.Empty));
+        Assert.False(servico.Fixo(string.Empty));
+        Assert.False(servico.EhAdmin("11111111111", adminNoBanco: false));
+    }
+
+    [Fact]
+    public void Usuario_nasce_servidor_sem_admin_e_o_acesso_muda_so_o_que_veio()
+    {
+        var usuario = NovoUsuario();
+        Assert.Equal((Niveis.Servidor, false), (usuario.Nivel, usuario.Admin));
+
+        usuario.DefinirAcesso(Niveis.Diretor, null, DateTimeOffset.UtcNow);
+        Assert.Equal((Niveis.Diretor, false), (usuario.Nivel, usuario.Admin));
+
+        usuario.DefinirAcesso(null, true, DateTimeOffset.UtcNow);
+        Assert.Equal((Niveis.Diretor, true), (usuario.Nivel, usuario.Admin));
+
+        usuario.DefinirAcesso(Niveis.Ministro, false, DateTimeOffset.UtcNow);
+        Assert.Equal((Niveis.Ministro, false), (usuario.Nivel, usuario.Admin));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(4)]
+    [InlineData(-1)]
+    public void Nivel_fora_de_1_a_3_e_recusado_e_nao_muda_nada(int nivel)
+    {
+        var usuario = NovoUsuario();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => usuario.DefinirAcesso(nivel, true, DateTimeOffset.UtcNow));
+
+        Assert.Equal((Niveis.Servidor, false), (usuario.Nivel, usuario.Admin));
     }
 
     [Theory]
@@ -68,22 +99,23 @@ public class NiveisTests
         Assert.Equal(0.400m, limiares.Do(FinalidadeDoDesafio.AcessoNivel2));
         Assert.Equal(0.500m, limiares.Do(FinalidadeDoDesafio.TrocarSenha));
         Assert.Equal(0.500m, limiares.Do(FinalidadeDoDesafio.Recadastro));
-        Assert.True(limiares.Do(FinalidadeDoDesafio.AcessoNivel3) > limiares.Do(FinalidadeDoDesafio.AcessoNivel2));
+        Assert.Equal(0.500m, limiares.Do(FinalidadeDoDesafio.AlterarAcesso));
         Assert.True(limiares.Do(FinalidadeDoDesafio.AcessoNivel2) > limiares.Login);
     }
 
     [Fact]
-    public void O_hash_do_desafio_muda_com_a_finalidade_o_dono_e_o_nonce()
+    public void O_hash_do_desafio_muda_com_a_finalidade_o_dono_os_parametros_e_o_nonce()
     {
         var dono = Guid.NewGuid();
         var nonce = new byte[32];
 
-        var base1 = DesafioBiometrico.HashDaAcao(dono, FinalidadeDoDesafio.AcessoNivel2, "{}", nonce);
+        var base1 = DesafioBiometrico.HashDaAcao(dono, FinalidadeDoDesafio.AlterarAcesso, "{\"nivel\":2}", nonce);
 
-        Assert.Equal(base1, DesafioBiometrico.HashDaAcao(dono, FinalidadeDoDesafio.AcessoNivel2, "{}", nonce));
-        Assert.NotEqual(base1, DesafioBiometrico.HashDaAcao(dono, FinalidadeDoDesafio.AcessoNivel3, "{}", nonce));
-        Assert.NotEqual(base1, DesafioBiometrico.HashDaAcao(Guid.NewGuid(), FinalidadeDoDesafio.AcessoNivel2, "{}", nonce));
-        Assert.NotEqual(base1, DesafioBiometrico.HashDaAcao(dono, FinalidadeDoDesafio.AcessoNivel2, "{}", [1, .. new byte[31]]));
+        Assert.Equal(base1, DesafioBiometrico.HashDaAcao(dono, FinalidadeDoDesafio.AlterarAcesso, "{\"nivel\":2}", nonce));
+        Assert.NotEqual(base1, DesafioBiometrico.HashDaAcao(dono, FinalidadeDoDesafio.AlterarAcesso, "{\"nivel\":3}", nonce));
+        Assert.NotEqual(base1, DesafioBiometrico.HashDaAcao(dono, FinalidadeDoDesafio.AcessoNivel2, "{\"nivel\":2}", nonce));
+        Assert.NotEqual(base1, DesafioBiometrico.HashDaAcao(Guid.NewGuid(), FinalidadeDoDesafio.AlterarAcesso, "{\"nivel\":2}", nonce));
+        Assert.NotEqual(base1, DesafioBiometrico.HashDaAcao(dono, FinalidadeDoDesafio.AlterarAcesso, "{\"nivel\":2}", [1, .. new byte[31]]));
     }
 
     [Fact]

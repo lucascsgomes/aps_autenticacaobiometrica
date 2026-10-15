@@ -73,7 +73,7 @@ public sealed class ServicoDeCadastro(MinisterioDbContext db, ServicoDeSenha sen
 
         await db.SaveChangesAsync(cancelamento);
         await transacao.CommitAsync(cancelamento);
-        return new SessaoEmitida(usuarioId, usuario.Nome, usuario.Cpf, refreshToken);
+        return new SessaoEmitida(usuarioId, usuario.Nome, usuario.Cpf, usuario.Nivel, usuario.Admin, refreshToken);
     }
 
     /// <summary>

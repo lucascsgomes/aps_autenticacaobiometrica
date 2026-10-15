@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Text.Json;
 using Ministerio.Contratos;
 using Ministerio.Dominio;
@@ -8,7 +9,7 @@ namespace Ministerio.Tests.Integracao;
 
 /// <summary>
 /// Os três níveis da base: o 1 abre com a sessão; o 2 e o 3 abrem só com o rosto confirmado na hora, e só para quem tem aquele nível.
-/// Ministro e diretor vêm da configuração da fábrica (CPFs fixos); qualquer outro cadastro é servidor.
+/// Ministro e diretor são cadastros promovidos pelo admin (painel); qualquer outro cadastro é servidor.
 /// </summary>
 public class NiveisTests : IClassFixture<FaceEnrollTests.SemAtalho>
 {
@@ -31,17 +32,26 @@ public class NiveisTests : IClassFixture<FaceEnrollTests.SemAtalho>
         return doc.RootElement.TryGetProperty("code", out var code) ? code.GetString() : null;
     }
 
-    // Cada CPF fixo só pode se cadastrar uma vez por base; os testes da classe dividem a mesma base.
+    // O admin (CPF da configuração) se cadastra uma vez por banco e promove os outros, como em produção.
     private static readonly SemaphoreSlim _trava = new(1, 1);
+    private static Titular? _admin;
     private static Titular? _ministro;
     private static Titular? _diretor;
 
-    private async Task<Titular> MinistroAsync()
+    private async Task<Titular> PromovidoAsync(int nivel)
     {
         await _trava.WaitAsync();
         try
         {
-            return _ministro ??= await _cliente.NovoTitularComRostoAsync(ApiFactory.CpfDoMinistro);
+            _admin ??= await _cliente.NovoTitularComRostoAsync(ApiFactory.CpfDoAdmin);
+            if (nivel == 3)
+            {
+                _ministro ??= await PromoverAsync(3);
+                return _ministro;
+            }
+
+            _diretor ??= await PromoverAsync(2);
+            return _diretor;
         }
         finally
         {
@@ -49,18 +59,16 @@ public class NiveisTests : IClassFixture<FaceEnrollTests.SemAtalho>
         }
     }
 
-    private async Task<Titular> DiretorAsync()
+    private async Task<Titular> PromoverAsync(int nivel)
     {
-        await _trava.WaitAsync();
-        try
-        {
-            return _diretor ??= await _cliente.NovoTitularComRostoAsync(ApiFactory.CpfDoDiretor);
-        }
-        finally
-        {
-            _trava.Release();
-        }
+        var titular = await _cliente.NovoTitularComRostoAsync();
+        await _cliente.DefinirNivelAsync(_admin!, titular, nivel);
+        return titular;
     }
+
+    private Task<Titular> MinistroAsync() => PromovidoAsync(3);
+
+    private Task<Titular> DiretorAsync() => PromovidoAsync(2);
 
     private async Task<Guid> DesafioAsync(Titular quem, string finalidade)
     {
@@ -96,7 +104,7 @@ public class NiveisTests : IClassFixture<FaceEnrollTests.SemAtalho>
     }
 
     [Fact]
-    public async Task O_perfil_mostra_o_nivel_que_vem_da_configuracao()
+    public async Task O_perfil_mostra_o_nivel_que_vem_do_banco_e_a_entrada_ja_traz_o_nivel_novo()
     {
         var servidor = await _cliente.NovoTitularComRostoAsync();
         var ministro = await MinistroAsync();
@@ -106,7 +114,9 @@ public class NiveisTests : IClassFixture<FaceEnrollTests.SemAtalho>
 
         Assert.Equal((1, "Servidor", true), (doServidor.Nivel, doServidor.Cargo, doServidor.TemRosto));
         Assert.Equal(3, doMinistro.Nivel);
-        Assert.Equal(3, ministro.Sessao.Usuario.Nivel); // a sessão já nasce sabendo o nível
+        var entrada = await (await _cliente.PostAsJsonAsync("/v1/auth/login/senha", new { cpf = ministro.Cpf, senha = ClienteDeTeste.Senha }, ClienteDeTeste.Json)).Ler<SessaoResponse>();
+        Assert.Equal(3, entrada.Usuario.Nivel);
+        Assert.Equal("Ministro do Meio Ambiente", entrada.Usuario.Cargo);
         Assert.DoesNotContain(servidor.Cpf, doServidor.CpfMascarado, StringComparison.Ordinal);
     }
 

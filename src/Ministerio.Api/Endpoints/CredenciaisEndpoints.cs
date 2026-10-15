@@ -38,22 +38,22 @@ internal static class CredenciaisEndpoints
     private static Guid? UsuarioDoToken(ClaimsPrincipal usuario) =>
         Guid.TryParse(usuario.FindFirstValue(JwtRegisteredClaimNames.Sub), out var id) ? id : null;
 
-    private static async Task<IResult> Perfil(ClaimsPrincipal usuario, MinisterioDbContext db, ServicoDeNiveis niveis, CancellationToken cancelamento)
+    private static async Task<IResult> Perfil(ClaimsPrincipal usuario, MinisterioDbContext db, ServicoDeAdmins admins, CancellationToken cancelamento)
     {
         if (UsuarioDoToken(usuario) is not { } id)
         {
             return Results.Unauthorized();
         }
 
-        var dados = await db.Usuarios.AsNoTracking().Where(u => u.Id == id).Select(u => new { u.Nome, u.Cpf }).SingleOrDefaultAsync(cancelamento);
+        var dados = await db.Usuarios.AsNoTracking().Where(u => u.Id == id).Select(u => new { u.Nome, u.Cpf, u.Nivel, u.Admin }).SingleOrDefaultAsync(cancelamento);
         if (dados is null)
         {
             return Results.Unauthorized();
         }
 
-        var nivel = niveis.De(dados.Cpf);
+        var nivel = dados.Nivel;
         var temRosto = await db.Templates.AnyAsync(t => t.UsuarioId == id, cancelamento);
-        return Results.Ok(new PerfilResponse(id, dados.Nome, Cpf.Mascarar(dados.Cpf), nivel, Niveis.Cargo(nivel), temRosto));
+        return Results.Ok(new PerfilResponse(id, dados.Nome, Cpf.Mascarar(dados.Cpf), nivel, Niveis.Cargo(nivel), temRosto, admins.EhAdmin(dados.Cpf, dados.Admin)));
     }
 
     private static async Task<IResult> Biometria(ClaimsPrincipal usuario, ServicoDeCredenciais credenciais, CancellationToken cancelamento) =>

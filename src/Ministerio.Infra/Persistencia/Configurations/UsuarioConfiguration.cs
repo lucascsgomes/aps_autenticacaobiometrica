@@ -16,6 +16,7 @@ internal sealed class UsuarioConfiguration : IEntityTypeConfiguration<Usuario>
             t.HasCheckConstraint("ck_usuarios_celular", @"celular IS NULL OR celular ~ '^\+55[0-9]{10,11}$'");
             t.HasCheckConstraint("ck_usuarios_status", "status IN ('CADASTRO_PENDENTE', 'ATIVO', 'BLOQUEADO', 'ENCERRADO')");
             t.HasCheckConstraint("ck_usuarios_falhas", "falhas_consecutivas >= 0");
+            t.HasCheckConstraint("ck_usuarios_nivel", "nivel BETWEEN 1 AND 3");
             t.HasCheckConstraint("ck_usuarios_consentimento_par",
                 "(consentimento_biometrico_em IS NULL) = (versao_termo_biometria IS NULL)");
             t.HasCheckConstraint("ck_usuarios_cadastro_concluido",
@@ -27,6 +28,8 @@ internal sealed class UsuarioConfiguration : IEntityTypeConfiguration<Usuario>
         u.Property(x => x.Cpf).HasColumnType("char(11)").IsRequired();
         u.Property(x => x.Email).IsRequired();
         u.Property(x => x.SenhaHash).IsRequired();
+        u.Property(x => x.Nivel).HasColumnType("smallint").HasDefaultValue(1);
+        u.Property(x => x.Admin).HasDefaultValue(false);
         u.Property(x => x.Status).HasConversion(new EnumComoTexto<StatusUsuario>()).IsRequired();
 
         u.HasIndex(x => x.Cpf).IsUnique().HasDatabaseName("uq_usuarios_cpf");

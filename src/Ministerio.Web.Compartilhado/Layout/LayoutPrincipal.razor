@@ -15,6 +15,10 @@
             {
                 <NavLink href="relatorio">Relatório</NavLink>
             }
+            @if (Sessao.Atual?.Usuario.Admin == true)
+            {
+                <NavLink href="admin">Admin</NavLink>
+            }
             <button type="button" class="link" @onclick="SairAsync">Sair</button>
         </nav>
     }

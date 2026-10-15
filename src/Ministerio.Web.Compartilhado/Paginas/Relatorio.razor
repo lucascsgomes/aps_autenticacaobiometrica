@@ -47,11 +47,11 @@ else
         }
     </section>
 
-    <section class="cartao">
+    <section class="cartao largo">
         <h2>Últimas tentativas</h2>
         <div class="tabela">
             <table>
-                <thead><tr><th>Quando</th><th>Quem</th><th>Acesso</th><th>Resultado</th><th>Motivo</th></tr></thead>
+                <thead><tr><th>Quando</th><th>Quem</th><th>Acesso</th><th>Resultado</th><th>Motivo</th><th>Detalhe</th></tr></thead>
                 <tbody>
                     @foreach (var a in _relatorio.Recentes)
                     {
@@ -61,6 +61,7 @@ else
                             <td>@Rotulo(a.Evento)</td>
                             <td>@(a.Resultado == "ACEITO" ? "Aceito" : "Recusado")</td>
                             <td>@(a.Motivo is null ? "" : Rotulo(a.Motivo))</td>
+                            <td>@a.Detalhe</td>
                         </tr>
                     }
                 </tbody>
@@ -82,6 +83,9 @@ else
         ["CONSULTA_NIVEL2"] = "Consulta nível 2",
         ["CONSULTA_NIVEL3"] = "Consulta nível 3",
         ["RELATORIO"] = "Relatório",
+        ["ALTERACAO_DE_ACESSO"] = "Mudança de acesso (admin)",
+        ["ADMIN_REQUIRED"] = "Exigiu admin",
+        ["CHANGE_NOT_ALLOWED"] = "Mudança não permitida",
         ["FACE_NOT_VERIFIED"] = "Rosto não confirmado",
         ["NIVEL_INSUFICIENTE"] = "Nível acima do permitido",
         ["INVALID_CREDENTIALS"] = "CPF ou senha inválidos",

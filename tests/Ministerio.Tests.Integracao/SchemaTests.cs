@@ -76,6 +76,37 @@ public class SchemaTests(SchemaTests.BaseCompartilhada compartilhado) : IClassFi
     }
 
     [Fact]
+    public async Task Usuario_nasce_servidor_e_sem_admin()
+    {
+        var conexao = compartilhado.Conexao;
+        var usuario = NovoUsuario();
+        await using var banco = ServidorPostgres.Contexto(conexao);
+        banco.Usuarios.Add(usuario);
+        await banco.SaveChangesAsync();
+
+        var lido = await banco.Usuarios.AsNoTracking().SingleAsync(u => u.Id == usuario.Id);
+
+        Assert.Equal((1, false), (lido.Nivel, lido.Admin));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(4)]
+    public async Task Nivel_fora_de_1_a_3_e_recusado_pelo_banco(int nivel)
+    {
+        var conexao = compartilhado.Conexao;
+        var usuario = NovoUsuario();
+        await using var banco = ServidorPostgres.Contexto(conexao);
+        banco.Usuarios.Add(usuario);
+        await banco.SaveChangesAsync();
+
+        var erro = await Assert.ThrowsAsync<PostgresException>(
+            () => banco.Database.ExecuteSqlAsync($"UPDATE usuarios SET nivel = {nivel} WHERE id = {usuario.Id}"));
+
+        Assert.Equal(CheckViolation, erro.SqlState);
+    }
+
+    [Fact]
     public async Task A_base_ambiental_nasce_com_os_vinte_registros_ficticios()
     {
         await using var db = ServidorPostgres.Contexto(compartilhado.Conexao);

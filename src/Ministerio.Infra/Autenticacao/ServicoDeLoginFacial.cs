@@ -74,7 +74,7 @@ public sealed class ServicoDeLoginFacial(
         var token = refresh.NovaFamilia(usuarioId);
         await db.SaveChangesAsync(cancelamento);
 
-        return new SessaoEmitida(usuarioId, usuario.Nome, usuario.Cpf, token);
+        return new SessaoEmitida(usuarioId, usuario.Nome, usuario.Cpf, usuario.Nivel, usuario.Admin, token);
     }
 }
 

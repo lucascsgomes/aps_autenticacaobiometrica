@@ -20,7 +20,7 @@ Trabalho da APS (faculdade).
 
 1. A pessoa se cadastra e registra o rosto. A foto não é guardada: só um vetor de 128 números, cifrado.
 2. **Entra pelo rosto, sem CPF**: o serviço facial compara a foto com todos os rostos cadastrados (identificação 1 para N) e diz quem é. Também dá para entrar com CPF e rosto (1 para 1) ou com CPF e senha.
-3. O nível de acesso vem do CPF, de uma lista configurada no servidor: ninguém vira ministro ou diretor sozinho.
+3. O nível de acesso fica no banco e só um **administrador** muda, no painel `/admin`, confirmando cada mudança com o próprio rosto. Ninguém se promove sozinho. O primeiro administrador vem da configuração (`Admin:Cpfs`) e não pode ser removido pelo painel.
 4. Para abrir o nível 2 ou 3, a pessoa mostra o rosto de novo. A senha não abre nível restrito.
 5. Tentar abrir um nível acima do seu é recusado e fica no relatório.
 
@@ -79,11 +79,10 @@ dotnet user-secrets set "ConnectionStrings:Dados" "Host=...;Database=...;Usernam
 dotnet user-secrets set "Face:BaseUrl" "http://127.0.0.1:7860" --project src/Ministerio.Api
 dotnet user-secrets set "Face:ChaveInterna" "chave-de-desenvolvimento" --project src/Ministerio.Api
 dotnet user-secrets set "Biometria:ChaveCifra" $chave --project src/Ministerio.Api   # perdeu a chave, perdeu os rostos: guarde fora do banco
-dotnet user-secrets set "Niveis:Ministro" "<CPF do ministro, só dígitos>" --project src/Ministerio.Api
-dotnet user-secrets set "Niveis:Diretores:0" "<CPF de um diretor>" --project src/Ministerio.Api   # 1, 2, 3... para mais diretores
+dotnet user-secrets set "Admin:Cpfs:0" "<CPF do administrador, só dígitos>" --project src/Ministerio.Api   # 1, 2... para mais administradores fixos
 ```
 
-Quem não está em `Niveis:Ministro` nem em `Niveis:Diretores` é servidor (nível 1). Sem `Face:BaseUrl` o rosto responde `503` (nunca é aceito sem verificação). Com `Face:BaseUrl`, a API exige `Face:ChaveInterna` e `Biometria:ChaveCifra`.
+Todo cadastro nasce servidor (nível 1). Quem está em `Admin:Cpfs` nasce administrador; os demais níveis e administradores saem do painel. Sem `Face:BaseUrl` o rosto responde `503` (nunca é aceito sem verificação). Com `Face:BaseUrl`, a API exige `Face:ChaveInterna` e `Biometria:ChaveCifra`.
 
 **3. Banco e API.**
 
@@ -164,6 +163,12 @@ Medido com fotos públicas reais (uma pessoa e outra): mesma pessoa em outra fot
 - **Erros** em Problem Details (RFC 9457) com um `code` estável (`FACE_NOT_VERIFIED`, `NIVEL_INSUFICIENTE`, `FACE_REQUIRED`, `ACCOUNT_LOCKED`...).
 - **LGPD**: consentimento específico para biometria, com a versão do termo; o usuário pode trocar ou apagar o próprio rosto.
 
+## Painel de acesso (administrador)
+
+`/admin` lista os cadastrados e deixa o administrador mudar o nível (1, 2 ou 3) e quem é administrador. Cada mudança exige o rosto do administrador (limiar 0,500, desafio de uso único) e entra no relatório como `ALTERACAO_DE_ACESSO`, com o antes e o depois. A mudança vale na hora, sem novo login. Regras: só administrador acessa (`403 ADMIN_REQUIRED`), o administrador da configuração e você mesmo não perdem o perfil de administrador (`409 CHANGE_NOT_ALLOWED`) e o alvo precisa ter o cadastro concluído (`404 USER_NOT_FOUND`).
+
+Rotas: `GET /v1/admin/usuarios` e `PUT /v1/admin/usuarios/{id}/acesso` (multipart: `desafio_id`, `dados` com `nivel` e/ou `admin`, `image`), com desafio aberto antes em `POST /v1/biometria/desafios` (`finalidade: ALTERAR_ACESSO`).
+
 ## Relatório de segurança
 
 Cada tentativa (entrada por senha, rosto ou identificação; consulta de cada nível; leitura do relatório) grava quem, quando, o resultado, o motivo e o IP. O ministro vê, em `/relatorio`, os totais (aceitas, recusadas, acima do nível), a contagem por tipo de acesso e por motivo, as últimas 50 tentativas e pode baixar tudo em CSV.
@@ -172,7 +177,7 @@ Cada tentativa (entrada por senha, rosto ou identificação; consulta de cada n�
 
 Tudo em plano gratuito: a API e o `face-service` no Render (dois serviços do mesmo `render.yaml`) e a interface no GitHub Pages. O banco é o Neon. O `face-service` usa cerca de 200 MB de memória (medido com fotos reais), dentro dos 512 MB do plano grátis.
 
-1. **API e face-service (Render).** *New > Blueprint*, escolha este repositório (ou cole o link, que é público) e preencha os valores pedidos: `ConnectionStrings__Dados` (a connection string do Neon), `Biometria__ChaveCifra`, `Niveis__Ministro` e `Niveis__Diretores__0` (os CPFs). Para mais diretores, crie `Niveis__Diretores__1`, `__2`... no painel. A chave entre os dois serviços (`FACE_INTERNAL_KEY`) o Render sorteia e copia sozinho.
+1. **API e face-service (Render).** *New > Blueprint*, escolha este repositório (ou cole o link, que é público) e preencha os valores pedidos: `ConnectionStrings__Dados` (a connection string do Neon), `Biometria__ChaveCifra` e `Admin__Cpfs__0` (o CPF do administrador fixo). Para mais, crie `Admin__Cpfs__1`, `__2`... no painel do Render. A chave entre os dois serviços (`FACE_INTERNAL_KEY`) o Render sorteia e copia sozinho.
 2. **Ligar a API ao face-service.** Copie a URL do serviço `face-service` e crie, na API, a variável `Face__BaseUrl` (sem barra no fim). O Render reinicia a API.
 3. **Interface (GitHub Pages).** Em *Settings > Pages*, escolha *Source: GitHub Actions*; em *Settings > Secrets and variables > Actions > Variables*, crie `API_URL` com a URL da API e rode o workflow "Publicar interface web". A origem do Pages já está liberada no CORS (`Cors__Origens__0`).
 
@@ -188,5 +193,5 @@ A cada push e pull request, o GitHub Actions faz o build da solution (aviso vira
 - **Limiares sem calibração** com uma população: os valores vêm do padrão do SFace e de medições pequenas.
 - **Duas contas com o mesmo rosto** não são impedidas no cadastro; na identificação 1 para N elas se tornam "parecidas demais" e a entrada pelo rosto sem CPF é recusada para as duas (o CPF com rosto continua valendo).
 - A identificação 1 para N compara com até 1000 cadastros por chamada.
-- Os dados da base são inventados, e o nível vem de uma lista de CPFs na configuração, sem tela de administração.
+- Os dados da base são inventados.
 - O vetor facial é dado biométrico sensível (LGPD). Fica restrito no banco, cifrado, e a foto nunca é guardada.

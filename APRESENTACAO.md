@@ -89,7 +89,7 @@ Quanto mais valiosa a informação, mais rígido o limiar. Medimos com fotos pú
 | **Foto de uma foto ou vídeo do rosto** | **pode passar** | **não há detecção de vivacidade**: a principal limitação |
 | Serviço de reconhecimento fora do ar | `503`, e **nada é aceito** | falha fechada: sem verificar, não entra |
 | Rosto errado | `401`; conta no bloqueio | 5 falhas seguidas bloqueiam por 1 minuto, dobrando até 15 |
-| Pedir um nível acima do seu | `403 NIVEL_INSUFICIENTE`, antes de gastar o rosto | o nível vem do CPF, na configuração do servidor; fica no relatório |
+| Pedir um nível acima do seu | `403 NIVEL_INSUFICIENTE`, antes de gastar o rosto | o nível fica no banco e só o admin muda; fica no relatório |
 
 Frase para fixar: **"Quando o sistema tem dúvida, ele recusa."**
 
@@ -100,14 +100,14 @@ Diga também (tema geral, não medimos): modelos de reconhecimento facial podem 
 - **A foto nunca é guardada.** Só o vetor de 128 números sobrevive, **cifrado** com AES-256-GCM, com o id do usuário como dado associado: copiar o vetor de uma pessoa para a linha de outra **não decifra**. A chave fica fora do banco.
 - **O score nunca vai para o cliente** (serviria de oráculo), e o relatório também não o guarda.
 - **Cada abertura de nível restrito pede o rosto de novo**, com desafio de uso único (90 s) amarrado à pessoa e ao nível. **A senha não abre nível 2 nem 3.**
-- **Ninguém vira ministro sozinho:** o nível vem de uma lista de CPFs na configuração do servidor.
+- **Ninguém vira ministro sozinho:** o nível fica no banco e só um administrador muda, no painel `/admin`, confirmando com o próprio rosto. Cada mudança entra no relatório.
 - **Limiar mais alto onde há mais a proteger** e **falha fechada** quando o serviço cai.
 - **Rate limit** e **bloqueio progressivo** contra tentativa em massa.
 - **LGPD:** consentimento registrado com a versão do termo; a pessoa pode trocar ou apagar o próprio rosto.
 
 ## 5. Demonstração ao vivo (4 min)
 
-Antes: o ministro, um diretor e um servidor já cadastrados (CPFs do ministro e do diretor configurados no servidor). Abra o site 2 minutos antes (os serviços dormem).
+Antes: um administrador (CPF em `Admin:Cpfs`) e três cadastrados; promova um a ministro e outro a diretor pelo painel `/admin`. Abra o site 2 minutos antes (os serviços dormem).
 
 1. **Entrar só com o rosto, sem CPF** (identificação 1 para N): "Entrar com o rosto". Mostre o painel com o nível e o cargo.
 2. **Nível 1** como servidor: abre direto, só município, estado, produto e ano.
@@ -127,7 +127,7 @@ Ao testar o serviço com várias fotos ao mesmo tempo, **17 de 40 fotos boas** v
 - **Sem detecção de vivacidade:** uma foto de uma foto pode ser aceita. Próximo passo: pedir um movimento ou usar um modelo de anti-spoofing.
 - **Limiares sem calibração** com um grupo: o próximo passo é medir falsa aceitação e falsa rejeição com consentimento.
 - **Cadastro duplicado não é impedido:** poderia recusar um rosto que já existe, com um limiar mais alto para evitar falso bloqueio.
-- Pré-processamento sem comparação sistemática; serviços gratuitos que dormem; dados fictícios; níveis por lista de CPFs, sem tela de administração.
+- Pré-processamento sem comparação sistemática; serviços gratuitos que dormem; dados fictícios; liveness não implementado.
 
 ## 8. Perguntas prováveis
 
@@ -136,7 +136,7 @@ Ao testar o serviço com várias fotos ao mesmo tempo, **17 de 40 fotos boas** v
 - **"Por que 0,363, 0,400 e 0,500?"** 0,363 é o recomendado pelo OpenCV para o SFace. Subimos para os níveis restritos porque o que se protege vale mais. Não calibramos com uma população.
 - **"E se a pessoa mostrar uma foto?"** Pode passar; não há vivacidade. A mitigação hoje é o limiar mais alto, o limite de tentativas, o bloqueio e o registro no relatório.
 - **"Onde fica o rosto da pessoa?"** Só um vetor de 128 números, cifrado, no banco. A foto não é gravada em lugar nenhum.
-- **"Como o sistema sabe quem é ministro?"** Pelo CPF, numa lista na configuração do servidor. Ninguém se promove sozinho.
+- **"Como o sistema sabe quem é ministro?"** Fica no banco, e só um administrador muda, no painel, confirmando com o rosto. Ninguém se promove sozinho.
 - **"Por que a senha não abre o nível 3?"** Para a senha não virar a porta dos fundos da biometria: nos níveis restritos só o rosto vale.
 - **"E se o banco vazar?"** O vetor está cifrado com chave fora do banco, e cada vetor só decifra para o seu dono.
 - **"Quanto tempo leva?"** Cerca de 0,4 s por foto no computador de desenvolvimento; o plano gratuito da nuvem é mais lento.
@@ -145,7 +145,7 @@ Ao testar o serviço com várias fotos ao mesmo tempo, **17 de 40 fotos boas** v
 ## 9. Checklist antes de apresentar
 
 - [ ] **2 minutos antes:** abra `/health` da API e `/internal/v1/health` do `face-service` e espere responderem (eles dormem).
-- [ ] No servidor, `Niveis__Ministro` e `Niveis__Diretores__0` com os CPFs de quem vai apresentar; cadastre antes o ministro, o diretor e um servidor, cada um com o seu rosto.
+- [ ] No servidor, `Admin__Cpfs__0` com o CPF do administrador; cadastre antes o administrador e mais dois, cada um com o seu rosto, e promova pelo `/admin`.
 - [ ] Teste a câmera do computador que vai usar e a permissão do navegador.
 - [ ] Combine com alguém (com consentimento) para o teste de rosto de outra pessoa.
 - [ ] Grave um vídeo curto da demonstração funcionando, como plano B.

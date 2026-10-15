@@ -45,7 +45,7 @@ internal static class AuthEndpoints
     private static async Task<IResult> Registrar(
         RegistrarRequest? corpo,
         ServicoDeCadastro cadastro,
-        ServicoDeNiveis niveis,
+        ServicoDeAdmins admins,
         JwtEmissor jwt,
         IConfiguration configuracao,
         IHostEnvironment ambiente,
@@ -66,7 +66,7 @@ internal static class AuthEndpoints
 
         var sessao = criado.RefreshToken is null
             ? null
-            : MontarSessao(new SessaoEmitida(criado.UsuarioId, criado.Nome, corpo.Cpf!, criado.RefreshToken), jwt, niveis, null);
+            : MontarSessao(new SessaoEmitida(criado.UsuarioId, criado.Nome, corpo.Cpf!, Niveis.Servidor, false, criado.RefreshToken), jwt, admins, null);
         var pendente = criado.Status == StatusUsuario.CadastroPendente;
         var cadastroToken = pendente ? jwt.EmitirDeCadastro(criado.UsuarioId) : default;
         var resposta = new RegistrarResponse(
@@ -85,7 +85,7 @@ internal static class AuthEndpoints
         ClaimsPrincipal usuario,
         IClienteFacial facial,
         ServicoDeCadastro cadastro,
-        ServicoDeNiveis niveis,
+        ServicoDeAdmins admins,
         JwtEmissor jwt,
         CancellationToken cancelamento)
     {
@@ -97,7 +97,7 @@ internal static class AuthEndpoints
         var imagem = Imagens.LerImagem(await Imagens.LerFormularioAsync(http.Request, cancelamento));
         var embedding = await facial.CadastrarAsync(imagem, http.TraceIdentifier, cancelamento);
         var sessao = await cadastro.ConcluirComRostoAsync(usuarioId, embedding, cancelamento);
-        return Results.Json(MontarSessao(sessao, jwt, niveis, MetodoFace), statusCode: StatusCodes.Status201Created);
+        return Results.Json(MontarSessao(sessao, jwt, admins, MetodoFace), statusCode: StatusCodes.Status201Created);
     }
 
     // Responde 200 com a mesma forma exista o CPF ou não: quem consulta não descobre quem tem conta nem quem tem rosto.
@@ -118,7 +118,7 @@ internal static class AuthEndpoints
         HttpContext http,
         ServicoDeLoginFacial login,
         ServicoDeAuditoria auditoria,
-        ServicoDeNiveis niveis,
+        ServicoDeAdmins admins,
         JwtEmissor jwt,
         CancellationToken cancelamento)
     {
@@ -134,7 +134,7 @@ internal static class AuthEndpoints
         {
             var sessao = await login.EntrarAsync(desafioId, imagem, http.TraceIdentifier, cancelamento);
             await auditoria.RegistrarAsync(sessao.UsuarioId, EventoDeAcesso.LoginRosto, ResultadoDoAcesso.Aceito, null, ip);
-            return Results.Ok(MontarSessao(sessao, jwt, niveis, MetodoFace));
+            return Results.Ok(MontarSessao(sessao, jwt, admins, MetodoFace));
         }
         catch (NegocioException e)
         {
@@ -148,7 +148,7 @@ internal static class AuthEndpoints
         HttpContext http,
         ServicoDeIdentificacao identificacao,
         ServicoDeAuditoria auditoria,
-        ServicoDeNiveis niveis,
+        ServicoDeAdmins admins,
         JwtEmissor jwt,
         CancellationToken cancelamento)
     {
@@ -158,7 +158,7 @@ internal static class AuthEndpoints
         {
             var sessao = await identificacao.EntrarAsync(imagem, http.TraceIdentifier, cancelamento);
             await auditoria.RegistrarAsync(sessao.UsuarioId, EventoDeAcesso.LoginIdentificacao, ResultadoDoAcesso.Aceito, null, ip);
-            return Results.Ok(MontarSessao(sessao, jwt, niveis, MetodoIdentificacao));
+            return Results.Ok(MontarSessao(sessao, jwt, admins, MetodoIdentificacao));
         }
         catch (NegocioException e)
         {
@@ -195,7 +195,7 @@ internal static class AuthEndpoints
         HttpContext http,
         ServicoDeAutenticacao autenticacao,
         ServicoDeAuditoria auditoria,
-        ServicoDeNiveis niveis,
+        ServicoDeAdmins admins,
         JwtEmissor jwt,
         CancellationToken cancelamento)
     {
@@ -210,7 +210,7 @@ internal static class AuthEndpoints
         {
             var sessao = await autenticacao.LoginComSenhaAsync(corpo!.Cpf!, corpo.Senha!, cancelamento);
             await auditoria.RegistrarAsync(sessao.UsuarioId, EventoDeAcesso.LoginSenha, ResultadoDoAcesso.Aceito, null, ip);
-            return Results.Ok(MontarSessao(sessao, jwt, niveis, MetodoSenha));
+            return Results.Ok(MontarSessao(sessao, jwt, admins, MetodoSenha));
         }
         catch (NegocioException e)
         {
@@ -219,7 +219,7 @@ internal static class AuthEndpoints
         }
     }
 
-    private static async Task<IResult> Renovar(RefreshRequest? corpo, ServicoDeAutenticacao autenticacao, ServicoDeNiveis niveis, JwtEmissor jwt, CancellationToken cancelamento)
+    private static async Task<IResult> Renovar(RefreshRequest? corpo, ServicoDeAutenticacao autenticacao, ServicoDeAdmins admins, JwtEmissor jwt, CancellationToken cancelamento)
     {
         if (string.IsNullOrWhiteSpace(corpo?.RefreshToken))
         {
@@ -227,7 +227,7 @@ internal static class AuthEndpoints
         }
 
         var sessao = await autenticacao.RenovarAsync(corpo.RefreshToken, cancelamento);
-        return Results.Ok(MontarSessao(sessao, jwt, niveis, null));
+        return Results.Ok(MontarSessao(sessao, jwt, admins, null));
     }
 
     // Sem exigir o JWT: quem tem o refresh token prova a posse da sessão, e o access token pode já ter vencido.
@@ -241,16 +241,16 @@ internal static class AuthEndpoints
         return Results.NoContent();
     }
 
-    private static SessaoResponse MontarSessao(SessaoEmitida sessao, JwtEmissor jwt, ServicoDeNiveis niveis, string? metodo)
+    private static SessaoResponse MontarSessao(SessaoEmitida sessao, JwtEmissor jwt, ServicoDeAdmins admins, string? metodo)
     {
-        var nivel = niveis.De(sessao.Cpf);
+        var nivel = sessao.Nivel;
         return new SessaoResponse(
             "Bearer",
             jwt.Emitir(sessao.UsuarioId),
             jwt.ExpiraEmSegundos,
             sessao.RefreshToken,
             (int)RefreshTokenServico.Validade.TotalSeconds,
-            new UsuarioDto(sessao.UsuarioId, sessao.Nome, nivel, Niveis.Cargo(nivel)),
+            new UsuarioDto(sessao.UsuarioId, sessao.Nome, nivel, Niveis.Cargo(nivel), admins.EhAdmin(sessao.Cpf, sessao.Admin)),
             metodo);
     }
 }

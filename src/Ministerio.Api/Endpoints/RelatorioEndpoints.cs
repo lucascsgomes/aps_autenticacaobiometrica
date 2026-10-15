@@ -26,10 +26,10 @@ internal static class RelatorioEndpoints
         return rotas;
     }
 
-    private static async Task<Guid> ExigirMinistroAsync(HttpContext http, ClaimsPrincipal usuario, MinisterioDbContext db, ServicoDeNiveis niveis, ServicoDeAuditoria auditoria, CancellationToken cancelamento)
+    private static async Task<Guid> ExigirMinistroAsync(HttpContext http, ClaimsPrincipal usuario, MinisterioDbContext db, ServicoDeAdmins admins, ServicoDeAuditoria auditoria, CancellationToken cancelamento)
     {
         var usuarioId = Guid.TryParse(usuario.FindFirstValue(JwtRegisteredClaimNames.Sub), out var id) ? id : throw new NaoAutenticadoException();
-        if (await db.ObterAsync(niveis, usuarioId, cancelamento) < Niveis.Ministro)
+        if ((await db.ObterAsync(admins, usuarioId, cancelamento)).Nivel < Niveis.Ministro)
         {
             await auditoria.RegistrarAsync(usuarioId, EventoDeAcesso.Relatorio, ResultadoDoAcesso.Recusado, "NIVEL_INSUFICIENTE", http.Connection.RemoteIpAddress);
             throw new NivelInsuficienteException(Niveis.Ministro);
@@ -38,9 +38,9 @@ internal static class RelatorioEndpoints
         return usuarioId;
     }
 
-    private static async Task<IResult> Resumo(HttpContext http, ClaimsPrincipal usuario, MinisterioDbContext db, ServicoDeNiveis niveis, ServicoDeAuditoria auditoria, CancellationToken cancelamento)
+    private static async Task<IResult> Resumo(HttpContext http, ClaimsPrincipal usuario, MinisterioDbContext db, ServicoDeAdmins admins, ServicoDeAuditoria auditoria, CancellationToken cancelamento)
     {
-        var usuarioId = await ExigirMinistroAsync(http, usuario, db, niveis, auditoria, cancelamento);
+        var usuarioId = await ExigirMinistroAsync(http, usuario, db, admins, auditoria, cancelamento);
 
         var acessos = db.Acessos.AsNoTracking();
         var total = await acessos.CountAsync(cancelamento);
@@ -57,13 +57,13 @@ internal static class RelatorioEndpoints
     }
 
     // Separador ponto e vírgula e BOM: o Excel em português abre direto, com acentos certos.
-    private static async Task<IResult> Csv(HttpContext http, ClaimsPrincipal usuario, MinisterioDbContext db, ServicoDeNiveis niveis, ServicoDeAuditoria auditoria, CancellationToken cancelamento)
+    private static async Task<IResult> Csv(HttpContext http, ClaimsPrincipal usuario, MinisterioDbContext db, ServicoDeAdmins admins, ServicoDeAuditoria auditoria, CancellationToken cancelamento)
     {
-        var usuarioId = await ExigirMinistroAsync(http, usuario, db, niveis, auditoria, cancelamento);
-        var texto = new StringBuilder("quando;usuario;evento;resultado;motivo;ip\r\n");
+        var usuarioId = await ExigirMinistroAsync(http, usuario, db, admins, auditoria, cancelamento);
+        var texto = new StringBuilder("quando;usuario;evento;resultado;motivo;ip;detalhe\r\n");
         foreach (var a in (await Linhas(db, LimiteDoCsv, cancelamento)).Select(Para))
         {
-            texto.Append(CultureInfo.InvariantCulture, $"{a.Quando:yyyy-MM-dd HH:mm:ss};{Celula(a.Usuario)};{a.Evento};{a.Resultado};{Celula(a.Motivo)};{Celula(a.Ip)}\r\n");
+            texto.Append(CultureInfo.InvariantCulture, $"{a.Quando:yyyy-MM-dd HH:mm:ss};{Celula(a.Usuario)};{a.Evento};{a.Resultado};{Celula(a.Motivo)};{Celula(a.Ip)};{Celula(a.Detalhe)}\r\n");
         }
 
         await auditoria.RegistrarAsync(usuarioId, EventoDeAcesso.Relatorio, ResultadoDoAcesso.Aceito, null, http.Connection.RemoteIpAddress);
@@ -79,10 +79,10 @@ internal static class RelatorioEndpoints
             .OrderByDescending(a => a.OcorridoEm).ThenByDescending(a => a.Id)
             .Take(quantidade)
             .GroupJoin(db.Usuarios, a => a.UsuarioId, u => u.Id, (a, us) => new { a, us })
-            .SelectMany(x => x.us.DefaultIfEmpty(), (x, u) => new LinhaDeAcesso(x.a.OcorridoEm, u == null ? null : u.Nome, x.a.Evento, x.a.Resultado, x.a.Motivo, x.a.Ip))
+            .SelectMany(x => x.us.DefaultIfEmpty(), (x, u) => new LinhaDeAcesso(x.a.OcorridoEm, u == null ? null : u.Nome, x.a.Evento, x.a.Resultado, x.a.Motivo, x.a.Ip, x.a.Detalhe))
             .ToListAsync(cancelamento);
 
-    private static AcessoDto Para(LinhaDeAcesso l) => new(l.Quando, l.Usuario, Codigo.De(l.Evento), Codigo.De(l.Resultado), l.Motivo, l.Ip);
+    private static AcessoDto Para(LinhaDeAcesso l) => new(l.Quando, l.Usuario, Codigo.De(l.Evento), Codigo.De(l.Resultado), l.Motivo, l.Ip, l.Detalhe);
 
-    private sealed record LinhaDeAcesso(DateTimeOffset Quando, string? Usuario, EventoDeAcesso Evento, ResultadoDoAcesso Resultado, string? Motivo, string? Ip);
+    private sealed record LinhaDeAcesso(DateTimeOffset Quando, string? Usuario, EventoDeAcesso Evento, ResultadoDoAcesso Resultado, string? Motivo, string? Ip, string? Detalhe);
 }

@@ -16,8 +16,8 @@ public sealed record LoginSenhaRequest(string? Cpf, string? Senha);
 
 public sealed record RefreshRequest(string? RefreshToken);
 
-/// <summary><c>nivel</c> vai de 1 (servidor) a 3 (ministro); <c>cargo</c> é o nome dele.</summary>
-public sealed record UsuarioDto(Guid Id, string Nome, int Nivel, string Cargo);
+/// <summary><c>nivel</c> vai de 1 (servidor) a 3 (ministro); <c>cargo</c> é o nome dele; <c>admin</c> abre o painel de acesso.</summary>
+public sealed record UsuarioDto(Guid Id, string Nome, int Nivel, string Cargo, bool Admin);
 
 /// <summary>Resposta de qualquer entrada bem-sucedida (cadastro concluído, login, refresh). <c>metodo</c> é SENHA, FACE ou IDENTIFICACAO.</summary>
 public sealed record SessaoResponse(

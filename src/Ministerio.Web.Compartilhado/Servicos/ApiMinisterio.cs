@@ -103,6 +103,16 @@ public sealed class ApiMinisterio(HttpClient http, SessaoApp sessao) : IDisposab
     public Task<Resposta<DadosResponse>> DadosRestritosAsync(int nivel, byte[] imagem) =>
         AcaoSensivelAsync<DadosResponse>(HttpMethod.Post, $"/v1/dados/{nivel}", $"ACESSO_NIVEL_{nivel}", null, new Credencial(null, imagem));
 
+    public Task<Resposta<List<UsuarioAdminDto>>> UsuariosAdminAsync() =>
+        EnviarAsync<List<UsuarioAdminDto>>(() => new HttpRequestMessage(HttpMethod.Get, "/v1/admin/usuarios"));
+
+    /// <summary>Muda o nível e/ou o perfil de admin de alguém. O rosto do admin confirma, amarrado a este usuário e a estes valores.</summary>
+    public Task<Resposta<bool>> AlterarAcessoAsync(Guid usuarioId, int? nivel, bool? admin, byte[] imagem)
+    {
+        var pedido = new AlterarAcessoRequest(usuarioId, nivel, admin);
+        return AcaoSensivelAsync<bool>(HttpMethod.Put, $"/v1/admin/usuarios/{usuarioId}/acesso", "ALTERAR_ACESSO", pedido, new Credencial(null, imagem), pedido);
+    }
+
     public Task<Resposta<RelatorioResponse>> RelatorioAsync() => EnviarAsync<RelatorioResponse>(() => new HttpRequestMessage(HttpMethod.Get, "/v1/relatorios/resumo"));
 
     public Task<Resposta<byte[]>> BaixarRelatorioAsync() => EnviarAsync<byte[]>(() => new HttpRequestMessage(HttpMethod.Get, "/v1/relatorios/acessos.csv"));

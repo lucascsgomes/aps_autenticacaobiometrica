@@ -1,12 +1,18 @@
+using Microsoft.EntityFrameworkCore;
 using Ministerio.Infra.Acesso;
 using Ministerio.Infra.Persistencia;
-using Microsoft.EntityFrameworkCore;
 
 namespace Ministerio.Api.Seguranca;
 
-internal static class NivelDoUsuario
+/// <summary>O que a pessoa pode fazer agora: o nível e o perfil de admin vêm do banco (e da lista de admins da configuração).</summary>
+internal readonly record struct Permissao(int Nivel, bool Admin);
+
+internal static class PermissaoDoUsuario
 {
-    /// <summary>O nível sai do CPF do usuário e da lista configurada, a cada pedido: mudar a lista vale na hora, sem refazer cadastro.</summary>
-    public static async Task<int> ObterAsync(this MinisterioDbContext db, ServicoDeNiveis niveis, Guid usuarioId, CancellationToken cancelamento) =>
-        niveis.De(await db.Usuarios.AsNoTracking().Where(u => u.Id == usuarioId).Select(u => u.Cpf).SingleAsync(cancelamento));
+    /// <summary>Lê a cada pedido, não do token: o admin muda o nível de alguém e vale na hora, sem esperar a sessão vencer.</summary>
+    public static async Task<Permissao> ObterAsync(this MinisterioDbContext db, ServicoDeAdmins admins, Guid usuarioId, CancellationToken cancelamento)
+    {
+        var u = await db.Usuarios.AsNoTracking().Where(x => x.Id == usuarioId).Select(x => new { x.Cpf, x.Nivel, x.Admin }).SingleAsync(cancelamento);
+        return new Permissao(u.Nivel, admins.EhAdmin(u.Cpf, u.Admin));
+    }
 }
