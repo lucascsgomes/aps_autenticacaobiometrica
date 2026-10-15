@@ -3,7 +3,7 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Primeiro só os arquivos de projeto: o restore fica em cache enquanto os pacotes não mudam.
-COPY global.json nuget.config Directory.Build.props Directory.Packages.props ./
+COPY global.json nuget.config Directory.Build.props Directory.Packages.props .editorconfig ./
 COPY src/Banco.Contratos/Banco.Contratos.csproj src/Banco.Contratos/
 COPY src/Banco.Dominio/Banco.Dominio.csproj src/Banco.Dominio/
 COPY src/Banco.Infra/Banco.Infra.csproj src/Banco.Infra/
