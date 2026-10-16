@@ -11,6 +11,8 @@ using Ministerio.Dominio.Biometria;
 using Ministerio.Dominio.Usuarios;
 using Ministerio.Infra.Acesso;
 using Ministerio.Infra.Autenticacao;
+using Ministerio.Infra.Cadastro;
+using Ministerio.Infra.Facial;
 using Ministerio.Infra.Persistencia;
 using RequestSizeLimitAttribute = Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute;
 
@@ -29,6 +31,13 @@ internal static class AdminEndpoints
         var grupo = rotas.MapGroup("/v1/admin").RequireAuthorization();
         grupo.MapGet("/usuarios", Listar).RequireRateLimiting(Limites.Leitura);
         grupo.MapPut("/usuarios/{id:guid}/acesso", Alterar)
+            .RequireRateLimiting(Limites.BiometriaAutenticada)
+            .WithMetadata(new RequestSizeLimitAttribute(Imagens.TamanhoMaximoDaRequisicao));
+        grupo.MapDelete("/usuarios/{id:guid}", Excluir)
+            .RequireRateLimiting(Limites.BiometriaAutenticada)
+            .WithMetadata(new RequestSizeLimitAttribute(Imagens.TamanhoMaximoDaRequisicao));
+        grupo.MapGet("/processamento", LerProcessamento).RequireRateLimiting(Limites.Leitura);
+        grupo.MapPut("/processamento", AlterarProcessamento)
             .RequireRateLimiting(Limites.BiometriaAutenticada)
             .WithMetadata(new RequestSizeLimitAttribute(Imagens.TamanhoMaximoDaRequisicao));
         return rotas;
@@ -142,4 +151,153 @@ internal static class AdminEndpoints
             throw;
         }
     }
+
+    // multipart: desafio_id e image (só o rosto vale). O desafio vem de /v1/biometria/desafios (EXCLUIR_CADASTRO) com o usuario_id.
+    private static async Task<IResult> Excluir(
+        Guid id,
+        HttpContext http,
+        ClaimsPrincipal usuario,
+        MinisterioDbContext db,
+        ServicoDeAdmins admins,
+        ServicoDeStepUp stepUp,
+        ServicoDeExclusao exclusao,
+        ServicoDeAuditoria auditoria,
+        CancellationToken cancelamento)
+    {
+        if (UsuarioDoToken(usuario) is not { } usuarioId)
+        {
+            return Results.Unauthorized();
+        }
+
+        var ip = http.Connection.RemoteIpAddress;
+        try
+        {
+            if (!(await db.ObterAsync(admins, usuarioId, cancelamento)).Admin)
+            {
+                throw new NaoEhAdminException();
+            }
+
+            var (confirmacao, erros) = await StepUpEndpoints.LerConfirmacaoAsync(http.Request, cancelamento);
+            if (confirmacao is null)
+            {
+                throw new ConfirmacaoNecessariaException(Codigo.De(FinalidadeDoDesafio.ExcluirCadastro));
+            }
+
+            if (erros.Count > 0)
+            {
+                return Validacao.Problema(erros);
+            }
+
+            if (confirmacao.Imagem is null)
+            {
+                throw new ExigeRostoException();
+            }
+
+            var alvo = await db.Usuarios.AsNoTracking().Where(u => u.Id == id).Select(u => new { u.Nome, u.Cpf }).SingleOrDefaultAsync(cancelamento) ?? throw new UsuarioNaoEncontradoException();
+            if (id == usuarioId)
+            {
+                throw new MudancaNaoPermitidaException("Para excluir a sua própria conta, use o Perfil.");
+            }
+
+            if (admins.Fixo(alvo.Cpf))
+            {
+                throw new MudancaNaoPermitidaException("Este admin vem da configuração do servidor, e o painel não consegue excluí-lo.");
+            }
+
+            await stepUp.ConfirmarAsync(usuarioId, FinalidadeDoDesafio.ExcluirCadastro, AcoesSensiveis.Canonico(id, null, null), confirmacao.DesafioId, null, confirmacao.Imagem, http.TraceIdentifier, cancelamento);
+            await exclusao.ExcluirAsync(id, cancelamento);
+            await auditoria.RegistrarAsync(usuarioId, EventoDeAcesso.ExclusaoDeCadastro, ResultadoDoAcesso.Aceito, null, ip, Cortar($"{alvo.Nome}: cadastro e rosto excluídos"));
+            return Results.NoContent();
+        }
+        catch (NegocioException e)
+        {
+            await auditoria.RegistrarAsync(usuarioId, EventoDeAcesso.ExclusaoDeCadastro, ResultadoDoAcesso.Recusado, e.Code, ip);
+            throw;
+        }
+    }
+
+    private static async Task<IResult> LerProcessamento(ClaimsPrincipal usuario, MinisterioDbContext db, ServicoDeAdmins admins, ProcessamentoFacial processamento, CancellationToken cancelamento)
+    {
+        if (UsuarioDoToken(usuario) is not { } usuarioId)
+        {
+            return Results.Unauthorized();
+        }
+
+        if (!(await db.ObterAsync(admins, usuarioId, cancelamento)).Admin)
+        {
+            throw new NaoEhAdminException();
+        }
+
+        var atual = await processamento.ObterAsync(cancelamento);
+        return Results.Ok(new ProcessamentoDto(atual.PreProcessamento, atual.TratamentoRuido, ProcessamentoFacial.PreProcessamentos, ProcessamentoFacial.TratamentosDeRuido, atual.AtualizadoEm));
+    }
+
+    // multipart: dados (JSON com pre_processamento e tratamento_ruido), desafio_id e image. O desafio vem de /v1/biometria/desafios (ALTERAR_PROCESSAMENTO).
+    private static async Task<IResult> AlterarProcessamento(
+        HttpContext http,
+        ClaimsPrincipal usuario,
+        MinisterioDbContext db,
+        ServicoDeAdmins admins,
+        ServicoDeStepUp stepUp,
+        ProcessamentoFacial processamento,
+        ServicoDeAuditoria auditoria,
+        IOptions<JsonOptions> json,
+        CancellationToken cancelamento)
+    {
+        if (UsuarioDoToken(usuario) is not { } usuarioId)
+        {
+            return Results.Unauthorized();
+        }
+
+        var ip = http.Connection.RemoteIpAddress;
+        try
+        {
+            if (!(await db.ObterAsync(admins, usuarioId, cancelamento)).Admin)
+            {
+                throw new NaoEhAdminException();
+            }
+
+            var (confirmacao, erros) = await StepUpEndpoints.LerConfirmacaoAsync(http.Request, cancelamento);
+            if (confirmacao is null)
+            {
+                throw new ConfirmacaoNecessariaException(Codigo.De(FinalidadeDoDesafio.AlterarProcessamento));
+            }
+
+            var pedido = StepUpEndpoints.Ler<AlterarProcessamentoRequest>(confirmacao.Dados, json.Value.SerializerOptions);
+            foreach (var (campo, mensagens) in AcoesSensiveis.ErrosDoProcessamento(pedido))
+            {
+                erros[campo] = mensagens;
+            }
+
+            if (erros.Count > 0)
+            {
+                return Validacao.Problema(erros);
+            }
+
+            if (confirmacao.Imagem is null)
+            {
+                throw new ExigeRostoException();
+            }
+
+            await stepUp.ConfirmarAsync(usuarioId, FinalidadeDoDesafio.AlterarProcessamento, AcoesSensiveis.Canonico(pedido!.PreProcessamento!, pedido.TratamentoRuido!), confirmacao.DesafioId, null, confirmacao.Imagem, http.TraceIdentifier, cancelamento);
+
+            var antes = await processamento.ObterAsync(cancelamento);
+            await processamento.DefinirAsync(db, pedido.PreProcessamento!, pedido.TratamentoRuido!, cancelamento);
+            await auditoria.RegistrarAsync(
+                usuarioId,
+                EventoDeAcesso.AlteracaoDeProcessamento,
+                ResultadoDoAcesso.Aceito,
+                null,
+                ip,
+                Cortar($"pré-processamento {antes.PreProcessamento} para {pedido.PreProcessamento}; ruído {antes.TratamentoRuido} para {pedido.TratamentoRuido}"));
+            return Results.NoContent();
+        }
+        catch (NegocioException e)
+        {
+            await auditoria.RegistrarAsync(usuarioId, EventoDeAcesso.AlteracaoDeProcessamento, ResultadoDoAcesso.Recusado, e.Code, ip);
+            throw;
+        }
+    }
+
+    private static string Cortar(string detalhe) => detalhe.Length > TamanhoMaximoDoDetalhe ? detalhe[..TamanhoMaximoDoDetalhe] : detalhe;
 }

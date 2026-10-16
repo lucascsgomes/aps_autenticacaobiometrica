@@ -133,7 +133,7 @@ dotnet test Ministerio.sln        # unitários e integração (PostgreSQL 17 emb
 O caminho da foto, em `face-service/biometria/pipeline.py`:
 
 1. a imagem é decodificada pelo OpenCV e reduzida para no máximo 640 px de largura;
-2. vai para tons de cinza e passa pelo pré-processamento (CLAHE por padrão; equalização e gaussiano existem, e três tratamentos de ruído também, desligados);
+2. vai para tons de cinza e passa pelo pré-processamento (CLAHE por padrão; equalização e gaussiano também existem) e, se ligado, por um tratamento de ruído (mediano, abertura ou fechamento; desligado por padrão). **O administrador escolhe os dois no painel `/admin`**, e a escolha vale para todas as fotos (cadastro e entrada);
 3. o **YuNet** detecta o rosto e 5 pontos (olhos, nariz, cantos da boca). Nenhum rosto vira `NO_FACE_DETECTED` e mais de um vira `MULTIPLE_FACES`;
 4. o **SFace** alinha o rosto (112×112) e extrai **128 números**;
 5. a comparação é a **similaridade do cosseno** entre dois vetores, e a decisão é `score >= limiar`.
@@ -161,13 +161,17 @@ Medido com fotos públicas reais (uma pessoa e outra): mesma pessoa em outra fot
 - **Rate limit** (janela de 1 minuto, `429` com `Retry-After`): rotas públicas de biometria 10 por IP, rotas autenticadas de biometria 15 por usuário, cadastro e renovação 20 por IP, leituras 120 por usuário. `RateLimit:Fator` multiplica os limites.
 - **Senha** com `PasswordHasher` do ASP.NET Identity, comparação sempre executada para igualar o tempo de resposta.
 - **Erros** em Problem Details (RFC 9457) com um `code` estável (`FACE_NOT_VERIFIED`, `NIVEL_INSUFICIENTE`, `FACE_REQUIRED`, `ACCOUNT_LOCKED`...).
-- **LGPD**: consentimento específico para biometria, com a versão do termo; o usuário pode trocar ou apagar o próprio rosto.
+- **LGPD**: consentimento específico para biometria, com a versão do termo; o usuário pode trocar ou apagar o próprio rosto e excluir a conta inteira (o cadastro inclui só nome, CPF, e-mail e senha; o celular foi retirado).
 
 ## Painel de acesso (administrador)
 
 `/admin` lista os cadastrados e deixa o administrador mudar o nível (1, 2 ou 3) e quem é administrador. Cada mudança exige o rosto do administrador (limiar 0,500, desafio de uso único) e entra no relatório como `ALTERACAO_DE_ACESSO`, com o antes e o depois. A mudança vale na hora, sem novo login. Regras: só administrador acessa (`403 ADMIN_REQUIRED`), o administrador da configuração e você mesmo não perdem o perfil de administrador (`409 CHANGE_NOT_ALLOWED`) e o alvo precisa ter o cadastro concluído (`404 USER_NOT_FOUND`).
 
-Rotas: `GET /v1/admin/usuarios` e `PUT /v1/admin/usuarios/{id}/acesso` (multipart: `desafio_id`, `dados` com `nivel` e/ou `admin`, `image`), com desafio aberto antes em `POST /v1/biometria/desafios` (`finalidade: ALTERAR_ACESSO`).
+**Excluir cadastro.** O administrador também exclui o cadastro de outra pessoa (botão Excluir da tabela), confirmando com o rosto. Apaga o usuário, o vetor do rosto, os desafios e as sessões; o histórico de acessos fica no relatório, sem o vínculo com a pessoa (`EXCLUSAO_DE_CADASTRO`). Não exclui a si mesmo nem o administrador da configuração (`409 CHANGE_NOT_ALLOWED`). Cada pessoa exclui a **própria conta** em *Perfil > Excluir minha conta*, confirmando com a senha ou com o rosto, e o vetor do rosto some junto.
+
+**Processamento do rosto.** O administrador escolhe o pré-processamento (CLAHE, equalização ou gaussiano) e o tratamento de ruído (nenhum, mediano, abertura ou fechamento), com confirmação por rosto. A escolha fica na tabela `configuracoes` (o serviço facial não guarda nada e reinicia no plano grátis) e a API a envia a cada foto (`preprocessing` e `noise`); a instância da API relê o banco a cada 60 s. Os vetores já cadastrados foram extraídos com o método antigo: depois de trocar, teste a entrada de quem já está cadastrado e refaça o rosto de quem deixar de ser reconhecido.
+
+Rotas: `GET /v1/admin/usuarios`, `PUT /v1/admin/usuarios/{id}/acesso` (multipart: `desafio_id`, `dados` com `nivel` e/ou `admin`, `image`), `DELETE /v1/admin/usuarios/{id}` (multipart: `desafio_id`, `image`), `GET` e `PUT /v1/admin/processamento` (multipart: `desafio_id`, `dados` com `pre_processamento` e `tratamento_ruido`, `image`) e `DELETE /v1/me` (a própria conta; `desafio_id` mais `image` ou `senha`). Cada desafio abre antes em `POST /v1/biometria/desafios` com a `finalidade` `ALTERAR_ACESSO`, `ALTERAR_PROCESSAMENTO` ou `EXCLUIR_CADASTRO`.
 
 ## Interface
 

@@ -7,6 +7,7 @@ using Ministerio.Dominio.Acesso;
 using Ministerio.Dominio.Biometria;
 using Ministerio.Infra.Acesso;
 using Ministerio.Infra.Autenticacao;
+using Ministerio.Infra.Facial;
 using Ministerio.Infra.Persistencia;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.Options;
@@ -46,6 +47,7 @@ internal static class StepUpEndpoints
         FinalidadeDoDesafio finalidade;
         string instrucao;
         var canonico = AcoesSensiveis.SemParametros;
+        Guid? cadastroAlvo = null;
         switch (corpo?.Finalidade)
         {
             case "ACESSO_NIVEL_2":
@@ -71,8 +73,28 @@ internal static class StepUpEndpoints
 
                 (finalidade, instrucao, canonico) = (FinalidadeDoDesafio.AlterarAcesso, "Mostre o rosto para confirmar a mudança de acesso.", AcoesSensiveis.Canonico(pedido!.UsuarioId!.Value, pedido.Nivel, pedido.Admin));
                 break;
+            case "ALTERAR_PROCESSAMENTO":
+                var processamento = Ler<AlterarProcessamentoRequest>(corpo.Parametros is { ValueKind: JsonValueKind.Object } pp ? pp.GetRawText() : null, json.Value.SerializerOptions);
+                var errosDoProcessamento = AcoesSensiveis.ErrosDoProcessamento(processamento);
+                if (errosDoProcessamento.Count > 0)
+                {
+                    return Validacao.Problema(errosDoProcessamento);
+                }
+
+                (finalidade, instrucao, canonico) = (FinalidadeDoDesafio.AlterarProcessamento, "Mostre o rosto para confirmar a mudança do processamento facial.", AcoesSensiveis.Canonico(processamento!.PreProcessamento!, processamento.TratamentoRuido!));
+                break;
+            case "EXCLUIR_CADASTRO":
+                var exclusao = Ler<ExcluirCadastroRequest>(corpo.Parametros is { ValueKind: JsonValueKind.Object } pe ? pe.GetRawText() : null, json.Value.SerializerOptions);
+                if (exclusao?.UsuarioId is not { } alvoDaExclusao)
+                {
+                    return Validacao.Problema(new Dictionary<string, string[]> { ["usuario_id"] = ["Informe o usuário."] });
+                }
+
+                cadastroAlvo = alvoDaExclusao;
+                (finalidade, instrucao, canonico) = (FinalidadeDoDesafio.ExcluirCadastro, "Confirme a exclusão do cadastro. Não dá para desfazer.", AcoesSensiveis.Canonico(alvoDaExclusao, null, null));
+                break;
             default:
-                return Validacao.Problema(new Dictionary<string, string[]> { ["finalidade"] = ["Use ACESSO_NIVEL_2, ACESSO_NIVEL_3, TROCAR_SENHA, RECADASTRO ou ALTERAR_ACESSO."] });
+                return Validacao.Problema(new Dictionary<string, string[]> { ["finalidade"] = ["Use ACESSO_NIVEL_2, ACESSO_NIVEL_3, TROCAR_SENHA, RECADASTRO, ALTERAR_ACESSO, ALTERAR_PROCESSAMENTO ou EXCLUIR_CADASTRO."] });
         }
 
         if (finalidade is FinalidadeDoDesafio.AcessoNivel2 or FinalidadeDoDesafio.AcessoNivel3)
@@ -85,7 +107,10 @@ internal static class StepUpEndpoints
             }
         }
 
-        if (finalidade == FinalidadeDoDesafio.AlterarAcesso && !(await db.ObterAsync(admins, usuarioId, cancelamento)).Admin)
+        // Excluir a própria conta qualquer um pode; excluir a de outra pessoa, só admin.
+        var soAdmin = finalidade is FinalidadeDoDesafio.AlterarAcesso or FinalidadeDoDesafio.AlterarProcessamento
+            || (finalidade == FinalidadeDoDesafio.ExcluirCadastro && cadastroAlvo != usuarioId);
+        if (soAdmin && !(await db.ObterAsync(admins, usuarioId, cancelamento)).Admin)
         {
             throw new NaoEhAdminException();
         }
@@ -167,6 +192,25 @@ internal static class AcoesSensiveis
 
         return erros;
     }
+
+    public static Dictionary<string, string[]> ErrosDoProcessamento(AlterarProcessamentoRequest? pedido)
+    {
+        var erros = new Dictionary<string, string[]>();
+        if (!ProcessamentoFacial.PreProcessamentos.Contains(pedido?.PreProcessamento ?? string.Empty))
+        {
+            erros["pre_processamento"] = [$"Use {string.Join(", ", ProcessamentoFacial.PreProcessamentos)}."];
+        }
+
+        if (!ProcessamentoFacial.TratamentosDeRuido.Contains(pedido?.TratamentoRuido ?? string.Empty))
+        {
+            erros["tratamento_ruido"] = [$"Use {string.Join(", ", ProcessamentoFacial.TratamentosDeRuido)}."];
+        }
+
+        return erros;
+    }
+
+    public static string Canonico(string preProcessamento, string tratamentoRuido) =>
+        JsonSerializer.Serialize(new SortedDictionary<string, string>(StringComparer.Ordinal) { ["pre_processamento"] = preProcessamento, ["tratamento_ruido"] = tratamentoRuido });
 
     /// <summary>JSON com as chaves em ordem e só o que foi pedido: é o que entra no hash do desafio, no pedido e na confirmação.</summary>
     public static string Canonico(Guid usuarioId, int? nivel, bool? admin)

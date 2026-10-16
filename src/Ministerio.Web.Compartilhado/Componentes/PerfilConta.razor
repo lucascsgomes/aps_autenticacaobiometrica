@@ -1,0 +1,62 @@
+@inject ApiMinisterio Api
+@inject SessaoApp Sessao
+@inject NavigationManager Navegacao
+
+<section class="cartao">
+    <h2>Excluir minha conta</h2>
+
+    @if (!_confirmando)
+    {
+        <p>Apaga o seu cadastro e o vetor do seu rosto, de forma definitiva. Para voltar, será preciso se cadastrar de novo. O histórico de acessos fica no relatório, sem o vínculo com você.</p>
+        <div class="acoes">
+            <button type="button" class="perigo" @onclick="() => _confirmando = true">Excluir minha conta</button>
+        </div>
+    }
+    else
+    {
+        <Confirmacao Texto="Confirme com a senha ou com o rosto para excluir a conta. Não dá para desfazer."
+                     RotuloDaSenha="Senha da conta"
+                     PermiteRosto="TemRosto"
+                     Ocupado="_ocupado"
+                     Erro="@_erro"
+                     OnConfirmar="ExcluirAsync"
+                     OnCancelar="Cancelar" />
+    }
+</section>
+
+@code {
+    private bool _confirmando;
+    private bool _ocupado;
+    private string? _erro;
+
+    [Parameter]
+    public bool TemRosto { get; set; }
+
+    private void Cancelar()
+    {
+        _confirmando = false;
+        _erro = null;
+    }
+
+    private async Task ExcluirAsync(Credencial credencial)
+    {
+        _ocupado = true;
+        _erro = null;
+        try
+        {
+            var r = await Api.ExcluirContaAsync(credencial);
+            if (r.Ok)
+            {
+                Sessao.Aviso = "Conta excluída, com o vetor do rosto.";
+                Navegacao.NavigateTo("entrar");
+                return;
+            }
+
+            _erro = r.Erro!.Mensagem;
+        }
+        finally
+        {
+            _ocupado = false;
+        }
+    }
+}

@@ -19,7 +19,7 @@ else
         <div class="c-terra"><strong>@_usuarios.Count(u => u.Nivel == 3)</strong><span>ministros (nível 3)</span></div>
         <div class="c-erro"><strong>@_usuarios.Count(u => u.Admin)</strong><span>administradores</span></div>
     </div>
-    <p class="rotulo">Mude o nível de acesso e quem é administrador. Cada mudança pede o seu rosto e fica no relatório.</p>
+    <p class="rotulo">Mude o nível de acesso, quem é administrador, exclua cadastros e escolha o processamento do rosto. Cada ação pede o seu rosto e fica no relatório.</p>
 
     @if (_aviso is not null)
     {
@@ -29,8 +29,19 @@ else
     @if (_editando is not null)
     {
         <section class="cartao largo">
-            <h2>@_editando.Nome</h2>
-            @if (!_confirmando)
+            <h2>@(_excluindo ? $"Excluir {_editando.Nome}" : _editando.Nome)</h2>
+            @if (_excluindo)
+            {
+                <p>O cadastro, o vetor do rosto e as sessões de <strong>@_editando.Nome</strong> serão apagados e não voltam. O histórico de acessos fica no relatório, sem o vínculo com a pessoa.</p>
+                <Confirmacao Texto="Mostre o seu rosto para confirmar a exclusão."
+                             SoRosto="true"
+                             PermiteRosto="true"
+                             Ocupado="_ocupado"
+                             Erro="@_erro"
+                             OnConfirmar="ExcluirAsync"
+                             OnCancelar="Cancelar" />
+            }
+            else if (!_confirmando)
             {
                 <label>Nível de acesso
                     <select @bind="_nivel">
@@ -90,14 +101,20 @@ else
                             <td>@if (u.Admin) { <span class="selo admin">@(u.AdminFixo ? "Admin fixo" : "Admin")</span> } else { <span class="rotulo">-</span> }</td>
                             <td><span class="selo @(u.TemRosto ? "" : "alerta")">@(u.TemRosto ? "Cadastrado" : "Sem rosto")</span></td>
                             <td>
-                                @if (u.Status == "ATIVO")
-                                {
-                                    <button type="button" class="secundario" disabled="@_ocupado" @onclick="() => Editar(u)">Alterar</button>
-                                }
-                                else
-                                {
-                                    <span class="rotulo">cadastro pendente</span>
-                                }
+                                <div class="acoes">
+                                    @if (u.Status == "ATIVO")
+                                    {
+                                        <button type="button" class="secundario" disabled="@_ocupado" @onclick="() => Editar(u)">Alterar</button>
+                                    }
+                                    else
+                                    {
+                                        <span class="rotulo">cadastro pendente</span>
+                                    }
+                                    @if (!u.EhVoce && !u.AdminFixo)
+                                    {
+                                        <button type="button" class="perigo" disabled="@_ocupado" @onclick="() => PedirExclusao(u)">Excluir</button>
+                                    }
+                                </div>
                             </td>
                         </tr>
                     }
@@ -110,21 +127,80 @@ else
     {
         <p class="vazio">Ninguém encontrado.</p>
     }
+
+    <section class="cartao largo">
+        <h2>Processamento do rosto</h2>
+        <p class="rotulo">Como o serviço de reconhecimento prepara a foto antes de procurar o rosto. Vale para todos os cadastros e entradas.</p>
+        @if (_processamento is null)
+        {
+            <p class="@(_erroDoProcessamento is null ? "vazio" : "aviso erro")">@(_erroDoProcessamento ?? "Carregando...")</p>
+        }
+        else if (!_confirmandoProcessamento)
+        {
+            <div class="filtros">
+                <label>Pré-processamento
+                    <select @bind="_pre">
+                        @foreach (var p in _processamento.PreProcessamentos)
+                        {
+                            <option value="@p">@RotuloDoPre(p)</option>
+                        }
+                    </select>
+                </label>
+                <label>Tratamento de ruído
+                    <select @bind="_ruido">
+                        @foreach (var r in _processamento.TratamentosDeRuido)
+                        {
+                            <option value="@r">@RotuloDoRuido(r)</option>
+                        }
+                    </select>
+                </label>
+            </div>
+            <p class="aviso alerta">Os rostos já cadastrados foram lidos com o método antigo. Se mudar, teste a entrada de quem já está cadastrado e refaça o rosto de quem deixar de ser reconhecido.</p>
+            @if (_erroDoProcessamento is not null)
+            {
+                <p class="aviso erro" role="alert">@_erroDoProcessamento</p>
+            }
+            <div class="acoes">
+                <button type="button" disabled="@(_ocupado || (_pre == _processamento.PreProcessamento && _ruido == _processamento.TratamentoRuido))" @onclick="ContinuarProcessamento">Salvar</button>
+                <span class="rotulo">Em uso: @RotuloDoPre(_processamento.PreProcessamento), ruído: @RotuloDoRuido(_processamento.TratamentoRuido)@(_processamento.AtualizadoEm is { } quando ? $" (desde {Formato.DataHora(quando)})" : "")</span>
+            </div>
+        }
+        else
+        {
+            <Confirmacao Texto="Mostre o seu rosto para confirmar a mudança do processamento."
+                         SoRosto="true"
+                         PermiteRosto="true"
+                         Ocupado="_ocupado"
+                         Erro="@_erroDoProcessamento"
+                         OnConfirmar="SalvarProcessamentoAsync"
+                         OnCancelar="CancelarProcessamento" />
+        }
+    </section>
 }
 
 @code {
     private List<UsuarioAdminDto>? _usuarios;
     private UsuarioAdminDto? _editando;
+    private ProcessamentoDto? _processamento;
     private string _filtro = "";
     private int _nivel;
     private bool _admin;
+    private bool _excluindo;
     private bool _confirmando;
     private bool _ocupado;
+    private string _pre = "";
+    private string _ruido = "";
+    private bool _confirmandoProcessamento;
     private string? _erro;
     private string? _erroDaLista;
+    private string? _erroDoProcessamento;
     private string? _aviso;
 
-    protected override Task CarregarAsync() => RecarregarAsync();
+    protected override async Task CarregarAsync()
+    {
+        await RecarregarAsync();
+        await RecarregarProcessamentoAsync();
+    }
 
     private async Task RecarregarAsync()
     {
@@ -139,8 +215,39 @@ else
         }
     }
 
+    private async Task RecarregarProcessamentoAsync()
+    {
+        var r = await Api.ProcessamentoAsync();
+        if (r.Ok)
+        {
+            _processamento = r.Valor;
+            (_pre, _ruido) = (r.Valor!.PreProcessamento, r.Valor.TratamentoRuido);
+        }
+        else
+        {
+            _erroDoProcessamento = r.Erro!.Mensagem;
+        }
+    }
+
     private static string Iniciais(string nome) =>
         string.Concat(nome.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(p => char.ToUpperInvariant(p[0])));
+
+    private static string RotuloDoPre(string codigo) => codigo switch
+    {
+        "clahe" => "CLAHE (contraste adaptativo)",
+        "equalizacao" => "Equalização de histograma",
+        "gaussiano" => "Filtro gaussiano",
+        _ => codigo,
+    };
+
+    private static string RotuloDoRuido(string codigo) => codigo switch
+    {
+        "nenhum" => "Nenhum (desligado)",
+        "mediana" => "Filtro mediano",
+        "abertura" => "Abertura morfológica",
+        "fechamento" => "Fechamento morfológico",
+        _ => codigo,
+    };
 
     private IEnumerable<UsuarioAdminDto> Filtrados() =>
         (_usuarios ?? []).Where(u => string.IsNullOrWhiteSpace(_filtro) || u.Nome.Contains(_filtro.Trim(), StringComparison.CurrentCultureIgnoreCase));
@@ -149,7 +256,15 @@ else
     {
         _editando = usuario;
         (_nivel, _admin) = (usuario.Nivel, usuario.Admin);
-        _confirmando = false;
+        (_excluindo, _confirmando) = (false, false);
+        _erro = null;
+        _aviso = null;
+    }
+
+    private void PedirExclusao(UsuarioAdminDto usuario)
+    {
+        _editando = usuario;
+        (_excluindo, _confirmando) = (true, false);
         _erro = null;
         _aviso = null;
     }
@@ -157,7 +272,7 @@ else
     private void Cancelar()
     {
         _editando = null;
-        _confirmando = false;
+        (_excluindo, _confirmando) = (false, false);
         _erro = null;
     }
 
@@ -190,6 +305,68 @@ else
             else
             {
                 _erro = r.Erro!.Mensagem;
+            }
+        }
+        finally
+        {
+            _ocupado = false;
+        }
+    }
+
+    private async Task ExcluirAsync(Credencial credencial)
+    {
+        _ocupado = true;
+        _erro = null;
+        try
+        {
+            var alvo = _editando!;
+            var r = await Api.ExcluirCadastroAsync(alvo.Id, credencial.Imagem!);
+            if (r.Ok)
+            {
+                _aviso = $"Cadastro de {alvo.Nome} excluído, com o vetor do rosto.";
+                Cancelar();
+                await RecarregarAsync();
+            }
+            else
+            {
+                _erro = r.Erro!.Mensagem;
+            }
+        }
+        finally
+        {
+            _ocupado = false;
+        }
+    }
+
+    private void ContinuarProcessamento()
+    {
+        _erroDoProcessamento = null;
+        _aviso = null;
+        _confirmandoProcessamento = true;
+    }
+
+    private void CancelarProcessamento()
+    {
+        _confirmandoProcessamento = false;
+        _erroDoProcessamento = null;
+    }
+
+    private async Task SalvarProcessamentoAsync(Credencial credencial)
+    {
+        _ocupado = true;
+        _erroDoProcessamento = null;
+        try
+        {
+            var r = await Api.AlterarProcessamentoAsync(_pre, _ruido, credencial.Imagem!);
+            if (r.Ok)
+            {
+                _aviso = "Processamento do rosto atualizado.";
+                _confirmandoProcessamento = false;
+                await RecarregarProcessamentoAsync();
+            }
+            else
+            {
+                _erroDoProcessamento = r.Erro!.Mensagem;
             }
         }
         finally

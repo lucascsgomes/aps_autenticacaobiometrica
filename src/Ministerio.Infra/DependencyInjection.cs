@@ -40,6 +40,9 @@ public static class DependencyInjection
         servicos.AddScoped<ServicoDeIdentificacao>();
         servicos.AddSingleton<ServicoDeAdmins>();
         servicos.AddScoped<ServicoDeAuditoria>();
+        servicos.AddScoped<ServicoDeExclusao>();
+        servicos.AddSingleton<ProcessamentoFacial>();
+        servicos.AddSingleton<IProcessamentoFacial>(sp => sp.GetRequiredService<ProcessamentoFacial>());
 
         AdicionarFacial(servicos, configuracao);
         return servicos;

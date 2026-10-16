@@ -110,6 +110,36 @@ public class ClienteFacialHttpTests
     private static ClienteFacialHttp Cliente(Falso falso) =>
         new(new HttpClient(falso) { BaseAddress = new Uri("http://face.local/") }, NullLogger<ClienteFacialHttp>.Instance);
 
+    private sealed class Escolha(string pre, string ruido) : IProcessamentoFacial
+    {
+        public Task<EscolhaDeProcessamento> ObterAsync(CancellationToken cancelamento = default) => Task.FromResult(new EscolhaDeProcessamento(pre, ruido, null));
+    }
+
+    [Theory]
+    [InlineData("gaussiano", "mediana", "mediana")]
+    [InlineData("clahe", ProcessamentoFacial.SemRuido, "none")]
+    public async Task Manda_a_escolha_do_admin_em_cada_foto(string pre, string ruido, string esperadoNoServico)
+    {
+        var falso = new Falso(_ => Task.FromResult(Json(HttpStatusCode.OK, Embedding())));
+        var cliente = new ClienteFacialHttp(new HttpClient(falso) { BaseAddress = new Uri("http://face.local/") }, NullLogger<ClienteFacialHttp>.Instance, new Escolha(pre, ruido));
+
+        await cliente.CadastrarAsync([1, 2, 3], null);
+
+        Assert.Equal(pre, falso.Campos["preprocessing"]);
+        Assert.Equal(esperadoNoServico, falso.Campos["noise"]);
+    }
+
+    [Fact]
+    public async Task Sem_escolha_nao_manda_os_campos_e_vale_o_padrao_do_servico()
+    {
+        var falso = new Falso(_ => Task.FromResult(Json(HttpStatusCode.OK, Embedding())));
+
+        await Cliente(falso).CadastrarAsync([1, 2, 3], null);
+
+        Assert.DoesNotContain("preprocessing", falso.Campos.Keys);
+        Assert.DoesNotContain("noise", falso.Campos.Keys);
+    }
+
     [Fact]
     public async Task Envia_a_imagem_no_campo_image_com_o_id_da_requisicao_e_devolve_o_vetor()
     {

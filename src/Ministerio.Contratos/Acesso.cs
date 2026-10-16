@@ -42,6 +42,19 @@ public sealed record RelatorioResponse(
 /// </summary>
 public sealed record AlterarAcessoRequest(Guid? UsuarioId, int? Nivel, bool? Admin);
 
+/// <summary>Exclusão de um cadastro (a do próprio usuário ou a feita pelo admin): o desafio e a confirmação valem só para este usuário.</summary>
+public sealed record ExcluirCadastroRequest(Guid? UsuarioId);
+
+/// <summary>Como o serviço facial prepara a foto. <c>TratamentoRuido</c> "nenhum" desliga o tratamento.</summary>
+public sealed record AlterarProcessamentoRequest(string? PreProcessamento, string? TratamentoRuido);
+
+public sealed record ProcessamentoDto(
+    string PreProcessamento,
+    string TratamentoRuido,
+    IReadOnlyList<string> PreProcessamentos,
+    IReadOnlyList<string> TratamentosDeRuido,
+    DateTimeOffset? AtualizadoEm);
+
 /// <summary><c>AdminFixo</c>: admin definido na configuração do servidor, que o painel não tira. <c>EhVoce</c>: é o próprio admin que está olhando.</summary>
 public sealed record UsuarioAdminDto(
     Guid Id,

@@ -1,7 +1,11 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Ministerio.Contratos;
 using Ministerio.Dominio;
+using Ministerio.Infra.Persistencia;
 
 namespace Ministerio.Tests.Integracao;
 
@@ -255,5 +259,245 @@ public class AdminTests : IClassFixture<FaceEnrollTests.SemAtalho>
             && a.Usuario == admin.Sessao.Usuario.Nome && a.Detalhe!.Contains(alvo.Sessao.Usuario.Nome, StringComparison.Ordinal) && a.Detalhe.Contains("nível 2", StringComparison.Ordinal));
         Assert.Contains(resumo.Recentes, a => a.Evento == "ALTERACAO_DE_ACESSO" && a.Resultado == "RECUSADO" && a.Motivo == "FACE_NOT_VERIFIED");
         Assert.Contains(resumo.PorEvento, c => c.Nome == "ALTERACAO_DE_ACESSO");
+    }
+
+    // ---- processamento do rosto, exclusão de cadastro e exclusão da própria conta ----
+
+    /// <summary>Abre o desafio (se não vier um) e manda a ação em multipart: rosto, ou senha. Devolve a resposta do primeiro passo que falhar.</summary>
+    private async Task<HttpResponseMessage> AcaoAsync(Titular quem, HttpMethod metodo, string rota, string finalidade, object parametros, object? dados = null, bool rosto = true, string? senha = null, Guid? desafio = null)
+    {
+        if (desafio is null)
+        {
+            var aberto = await _cliente.Enviar(HttpMethod.Post, "/v1/biometria/desafios", quem.Sessao, new { finalidade, parametros });
+            if (aberto.StatusCode != HttpStatusCode.Created)
+            {
+                return aberto;
+            }
+
+            desafio = (await aberto.Ler<DesafioDeAcaoResponse>()).DesafioId;
+        }
+
+        var requisicao = new HttpRequestMessage(metodo, rota);
+        requisicao.Headers.Authorization = new AuthenticationHeaderValue("Bearer", quem.Sessao.AccessToken);
+        var corpo = new MultipartFormDataContent { { new StringContent(desafio.Value.ToString()), "desafio_id" } };
+        if (dados is not null)
+        {
+            corpo.Add(new StringContent(JsonSerializer.Serialize(dados, ClienteDeTeste.Json)), "dados");
+        }
+
+        if (senha is not null)
+        {
+            corpo.Add(new StringContent(senha), "senha");
+        }
+
+        if (rosto)
+        {
+            var arquivo = new ByteArrayContent(ClienteDeTeste.Foto);
+            arquivo.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+            corpo.Add(arquivo, "image", "rosto.jpg");
+        }
+
+        requisicao.Content = corpo;
+        return await _cliente.SendAsync(requisicao);
+    }
+
+    private Task<HttpResponseMessage> ProcessarAsync(Titular admin, string pre, string ruido, bool rosto = true, string? senha = null)
+    {
+        var pedido = new { pre_processamento = pre, tratamento_ruido = ruido };
+        return AcaoAsync(admin, HttpMethod.Put, "/v1/admin/processamento", "ALTERAR_PROCESSAMENTO", pedido, pedido, rosto, senha);
+    }
+
+    private Task<HttpResponseMessage> ExcluirAsync(Titular quem, Guid alvo, bool rosto = true, string? senha = null, Guid? desafio = null) =>
+        AcaoAsync(quem, HttpMethod.Delete, $"/v1/admin/usuarios/{alvo}", "EXCLUIR_CADASTRO", new { usuario_id = alvo }, null, rosto, senha, desafio);
+
+    private async Task<bool> TemRostoNoBancoAsync(Guid usuarioId)
+    {
+        using var escopo = _fabrica.Services.CreateScope();
+        var db = escopo.ServiceProvider.GetRequiredService<MinisterioDbContext>();
+        return await db.Templates.AnyAsync(x => x.UsuarioId == usuarioId);
+    }
+
+    private async Task<bool> ExisteNoBancoAsync(Guid usuarioId)
+    {
+        using var escopo = _fabrica.Services.CreateScope();
+        var db = escopo.ServiceProvider.GetRequiredService<MinisterioDbContext>();
+        return await db.Usuarios.AnyAsync(x => x.Id == usuarioId);
+    }
+
+    [Fact]
+    public async Task O_admin_escolhe_o_processamento_com_o_rosto_e_a_escolha_fica_no_relatorio()
+    {
+        var admin = await AdminAsync();
+        var ministro = await _cliente.NovoTitularComRostoAsync();
+        await _cliente.DefinirNivelAsync(admin, ministro, 3);
+
+        var mudou = await ProcessarAsync(admin, "gaussiano", "mediana");
+        var atual = await (await _cliente.Enviar(HttpMethod.Get, "/v1/admin/processamento", admin.Sessao)).Ler<ProcessamentoDto>();
+        var resumo = await (await _cliente.Enviar(HttpMethod.Get, "/v1/relatorios/resumo", ministro.Sessao)).Ler<RelatorioResponse>();
+        await ProcessarAsync(admin, "clahe", "nenhum");
+
+        Assert.Equal(HttpStatusCode.NoContent, mudou.StatusCode);
+        Assert.Equal("gaussiano", atual.PreProcessamento);
+        Assert.Equal("mediana", atual.TratamentoRuido);
+        Assert.Contains("clahe", atual.PreProcessamentos);
+        Assert.Contains("nenhum", atual.TratamentosDeRuido);
+        Assert.Contains(resumo.Recentes, a => a.Evento == "ALTERACAO_DE_PROCESSAMENTO" && a.Resultado == "ACEITO" && a.Detalhe!.Contains("gaussiano", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task So_admin_ve_e_muda_o_processamento()
+    {
+        var servidor = await _cliente.NovoTitularComRostoAsync();
+
+        var ler = await _cliente.Enviar(HttpMethod.Get, "/v1/admin/processamento", servidor.Sessao);
+        var mudar = await ProcessarAsync(servidor, "gaussiano", "nenhum");
+
+        Assert.Equal(HttpStatusCode.Forbidden, ler.StatusCode);
+        Assert.Equal("ADMIN_REQUIRED", await Code(ler));
+        Assert.Equal(HttpStatusCode.Forbidden, mudar.StatusCode);
+        Assert.Equal("ADMIN_REQUIRED", await Code(mudar));
+    }
+
+    [Fact]
+    public async Task Processamento_recusa_opcao_inexistente_e_a_senha_nao_confirma()
+    {
+        var admin = await AdminAsync();
+
+        var invalido = await ProcessarAsync(admin, "inexistente", "nenhum");
+        var comSenha = await ProcessarAsync(admin, "equalizacao", "nenhum", rosto: false, senha: ClienteDeTeste.Senha);
+
+        Assert.Equal(HttpStatusCode.BadRequest, invalido.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, comSenha.StatusCode);
+        Assert.Equal("FACE_REQUIRED", await Code(comSenha));
+    }
+
+    [Fact]
+    public async Task Rosto_que_nao_bate_nao_muda_o_processamento()
+    {
+        var admin = await AdminAsync();
+
+        Facial.Corresponde = false;
+        var resposta = await ProcessarAsync(admin, "equalizacao", "fechamento");
+        Facial.Corresponde = true;
+        var atual = await (await _cliente.Enviar(HttpMethod.Get, "/v1/admin/processamento", admin.Sessao)).Ler<ProcessamentoDto>();
+
+        Assert.Equal(HttpStatusCode.Unauthorized, resposta.StatusCode);
+        Assert.Equal("FACE_NOT_VERIFIED", await Code(resposta));
+        Assert.NotEqual("equalizacao", atual.PreProcessamento);
+    }
+
+    [Fact]
+    public async Task Admin_exclui_o_cadastro_e_o_vetor_do_rosto_some()
+    {
+        var admin = await AdminAsync();
+        var ministro = await _cliente.NovoTitularComRostoAsync();
+        await _cliente.DefinirNivelAsync(admin, ministro, 3);
+        var alvo = await _cliente.NovoTitularComRostoAsync();
+        var id = alvo.Sessao.Usuario.Id;
+        Assert.True(await TemRostoNoBancoAsync(id));
+
+        var resposta = await ExcluirAsync(admin, id);
+
+        Assert.Equal(HttpStatusCode.NoContent, resposta.StatusCode);
+        Assert.False(await ExisteNoBancoAsync(id));
+        Assert.False(await TemRostoNoBancoAsync(id));
+        var lista = await (await _cliente.Enviar(HttpMethod.Get, "/v1/admin/usuarios", admin.Sessao)).Ler<List<UsuarioAdminDto>>();
+        Assert.DoesNotContain(lista, u => u.Id == id);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _cliente.Enviar(HttpMethod.Get, "/v1/me", alvo.Sessao)).StatusCode);
+        var resumo = await (await _cliente.Enviar(HttpMethod.Get, "/v1/relatorios/resumo", ministro.Sessao)).Ler<RelatorioResponse>();
+        Assert.Contains(resumo.Recentes, a => a.Evento == "EXCLUSAO_DE_CADASTRO" && a.Resultado == "ACEITO" && a.Detalhe!.Contains(alvo.Sessao.Usuario.Nome, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Excluir_cadastro_e_so_do_admin_e_so_com_o_rosto()
+    {
+        var admin = await AdminAsync();
+        var servidor = await _cliente.NovoTitularComRostoAsync();
+        var alvo = await _cliente.NovoTitularComRostoAsync();
+
+        var porServidor = await ExcluirAsync(servidor, alvo.Sessao.Usuario.Id);
+        var comSenha = await ExcluirAsync(admin, alvo.Sessao.Usuario.Id, rosto: false, senha: ClienteDeTeste.Senha);
+        Facial.Corresponde = false;
+        var rostoErrado = await ExcluirAsync(admin, alvo.Sessao.Usuario.Id);
+        Facial.Corresponde = true;
+
+        Assert.Equal(HttpStatusCode.Forbidden, porServidor.StatusCode);
+        Assert.Equal("ADMIN_REQUIRED", await Code(porServidor));
+        Assert.Equal(HttpStatusCode.Forbidden, comSenha.StatusCode);
+        Assert.Equal("FACE_REQUIRED", await Code(comSenha));
+        Assert.Equal(HttpStatusCode.Unauthorized, rostoErrado.StatusCode);
+        Assert.True(await ExisteNoBancoAsync(alvo.Sessao.Usuario.Id));
+        Assert.True(await TemRostoNoBancoAsync(alvo.Sessao.Usuario.Id));
+    }
+
+    [Fact]
+    public async Task Admin_nao_exclui_a_si_mesmo_nem_o_admin_da_configuracao_nem_quem_nao_existe()
+    {
+        var admin = await AdminAsync();
+        var outroAdmin = await _cliente.NovoTitularComRostoAsync();
+        await _cliente.AlterarAcessoAsync(admin, outroAdmin.Sessao.Usuario.Id, nivel: null, ehAdmin: true);
+
+        var aSiMesmo = await ExcluirAsync(outroAdmin, outroAdmin.Sessao.Usuario.Id);
+        var fixo = await ExcluirAsync(outroAdmin, admin.Sessao.Usuario.Id);
+        var inexistente = await ExcluirAsync(admin, Guid.NewGuid());
+
+        Assert.Equal(HttpStatusCode.Conflict, aSiMesmo.StatusCode);
+        Assert.Equal("CHANGE_NOT_ALLOWED", await Code(aSiMesmo));
+        Assert.Equal(HttpStatusCode.Conflict, fixo.StatusCode);
+        Assert.Equal("CHANGE_NOT_ALLOWED", await Code(fixo));
+        Assert.Equal(HttpStatusCode.NotFound, inexistente.StatusCode);
+        Assert.True(await ExisteNoBancoAsync(admin.Sessao.Usuario.Id));
+    }
+
+    [Fact]
+    public async Task O_desafio_de_exclusao_vale_so_para_aquele_usuario()
+    {
+        var admin = await AdminAsync();
+        var a = await _cliente.NovoTitularComRostoAsync();
+        var b = await _cliente.NovoTitularComRostoAsync();
+        var paraA = (await (await _cliente.Enviar(HttpMethod.Post, "/v1/biometria/desafios", admin.Sessao, new { finalidade = "EXCLUIR_CADASTRO", parametros = new { usuario_id = a.Sessao.Usuario.Id } })).Ler<DesafioDeAcaoResponse>()).DesafioId;
+
+        var emB = await ExcluirAsync(admin, b.Sessao.Usuario.Id, desafio: paraA);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, emB.StatusCode);
+        Assert.True(await ExisteNoBancoAsync(b.Sessao.Usuario.Id));
+    }
+
+    [Fact]
+    public async Task O_usuario_exclui_a_propria_conta_com_a_senha_e_o_vetor_do_rosto_some()
+    {
+        var admin = await AdminAsync();
+        var ministro = await _cliente.NovoTitularComRostoAsync();
+        await _cliente.DefinirNivelAsync(admin, ministro, 3);
+        var dono = await _cliente.NovoTitularComRostoAsync();
+        var id = dono.Sessao.Usuario.Id;
+
+        var errada = await AcaoAsync(dono, HttpMethod.Delete, "/v1/me", "EXCLUIR_CADASTRO", new { usuario_id = id }, rosto: false, senha: "senha-errada-qualquer");
+        var certa = await AcaoAsync(dono, HttpMethod.Delete, "/v1/me", "EXCLUIR_CADASTRO", new { usuario_id = id }, rosto: false, senha: ClienteDeTeste.Senha);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, errada.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, certa.StatusCode);
+        Assert.False(await ExisteNoBancoAsync(id));
+        Assert.False(await TemRostoNoBancoAsync(id));
+        var entrar = await _cliente.Enviar(HttpMethod.Post, "/v1/auth/login/senha", null, new { cpf = dono.Cpf, senha = ClienteDeTeste.Senha });
+        Assert.Equal(HttpStatusCode.Unauthorized, entrar.StatusCode);
+        var resumo = await (await _cliente.Enviar(HttpMethod.Get, "/v1/relatorios/resumo", ministro.Sessao)).Ler<RelatorioResponse>();
+        Assert.Contains(resumo.Recentes, a => a.Evento == "EXCLUSAO_DE_CADASTRO" && a.Detalhe!.Contains("excluiu a própria conta", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task O_usuario_tambem_exclui_a_propria_conta_com_o_rosto_e_nao_apaga_a_de_outro()
+    {
+        var dono = await _cliente.NovoTitularComRostoAsync();
+        var vitima = await _cliente.NovoTitularComRostoAsync();
+
+        var contraOutro = await AcaoAsync(dono, HttpMethod.Delete, "/v1/me", "EXCLUIR_CADASTRO", new { usuario_id = vitima.Sessao.Usuario.Id });
+        var propria = await AcaoAsync(dono, HttpMethod.Delete, "/v1/me", "EXCLUIR_CADASTRO", new { usuario_id = dono.Sessao.Usuario.Id });
+
+        Assert.Equal(HttpStatusCode.Forbidden, contraOutro.StatusCode);
+        Assert.Equal("ADMIN_REQUIRED", await Code(contraOutro));
+        Assert.Equal(HttpStatusCode.NoContent, propria.StatusCode);
+        Assert.True(await ExisteNoBancoAsync(vitima.Sessao.Usuario.Id));
+        Assert.False(await ExisteNoBancoAsync(dono.Sessao.Usuario.Id));
     }
 }

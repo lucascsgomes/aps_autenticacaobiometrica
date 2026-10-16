@@ -343,3 +343,7 @@ main > .rotulo { margin-bottom: 12px; }
 @media (prefers-reduced-motion: reduce) {
     .mira .oval, .mira.analisando .varredura { animation: none; }
 }
+
+button.perigo { background: transparent; color: var(--erro); border: 1px solid var(--erro); }
+button.perigo:hover:not(:disabled) { background: var(--erro-fundo); }
+.aviso.alerta { background: var(--alerta-fundo); color: var(--alerta); }

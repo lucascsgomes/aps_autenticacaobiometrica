@@ -57,13 +57,14 @@ internal sealed class ClienteFacialNaoConfigurado : IClienteFacial
         throw new ServicoFacialIndisponivelException();
 }
 
-public sealed partial class ClienteFacialHttp(HttpClient http, ILogger<ClienteFacialHttp> logger) : IClienteFacial
+public sealed partial class ClienteFacialHttp(HttpClient http, ILogger<ClienteFacialHttp> logger, IProcessamentoFacial? processamento = null) : IClienteFacial
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
 
     public async Task<byte[]> CadastrarAsync(byte[] imagem, string? idDaRequisicao, CancellationToken cancelamento = default)
     {
         using var conteudo = new MultipartFormDataContent { { Imagem(imagem), "image", "rosto" } };
+        await AdicionarProcessamentoAsync(conteudo, cancelamento);
         using var resposta = await PostarAsync("internal/v1/face/enroll", conteudo, idDaRequisicao, cancelamento);
 
         var corpo = await resposta.Content.ReadFromJsonAsync<RespostaDeEnroll>(Json, cancelamento);
@@ -92,6 +93,7 @@ public sealed partial class ClienteFacialHttp(HttpClient http, ILogger<ClienteFa
             { new StringContent(Convert.ToBase64String(referencia)), "reference_b64" },
             { new StringContent(limiar.ToString(CultureInfo.InvariantCulture)), "threshold" },
         };
+        await AdicionarProcessamentoAsync(conteudo, cancelamento);
         using var resposta = await PostarAsync("internal/v1/face/verify", conteudo, idDaRequisicao, cancelamento);
 
         var corpo = await resposta.Content.ReadFromJsonAsync<RespostaDeVerify>(Json, cancelamento);
@@ -114,6 +116,7 @@ public sealed partial class ClienteFacialHttp(HttpClient http, ILogger<ClienteFa
             { new StringContent(limiar.ToString(CultureInfo.InvariantCulture)), "threshold" },
             { new StringContent(margem.ToString(CultureInfo.InvariantCulture)), "margin" },
         };
+        await AdicionarProcessamentoAsync(conteudo, cancelamento);
         using var resposta = await PostarAsync("internal/v1/face/identify", conteudo, idDaRequisicao, cancelamento);
 
         var corpo = await resposta.Content.ReadFromJsonAsync<RespostaDeIdentify>(Json, cancelamento);
@@ -124,6 +127,19 @@ public sealed partial class ClienteFacialHttp(HttpClient http, ILogger<ClienteFa
         }
 
         return new ResultadoDaIdentificacao(corpo.Identified, corpo.CandidateId, corpo.Score, corpo.Ambiguous);
+    }
+
+    /// <summary>A escolha do admin (pré-processamento e ruído) vai em toda foto, para cadastro e comparação usarem o mesmo caminho.</summary>
+    private async Task AdicionarProcessamentoAsync(MultipartFormDataContent conteudo, CancellationToken cancelamento)
+    {
+        if (processamento is null)
+        {
+            return;
+        }
+
+        var escolha = await processamento.ObterAsync(cancelamento);
+        conteudo.Add(new StringContent(escolha.PreProcessamento), "preprocessing");
+        conteudo.Add(new StringContent(escolha.TratamentoRuido == ProcessamentoFacial.SemRuido ? "none" : escolha.TratamentoRuido), "noise");
     }
 
     private static ByteArrayContent Imagem(byte[] bytes)
@@ -172,7 +188,7 @@ public sealed partial class ClienteFacialHttp(HttpClient http, ILogger<ClienteFa
                     throw new ImagemInvalidaException();
                 case "IMAGE_TOO_LARGE":
                     throw new ImagemGrandeException();
-                case "INVALID_REFERENCE" or "INVALID_THRESHOLD" or "INVALID_CANDIDATES" or "INVALID_MARGIN":
+                case "INVALID_REFERENCE" or "INVALID_THRESHOLD" or "INVALID_CANDIDATES" or "INVALID_MARGIN" or "INVALID_PROCESSING":
                     // Bug nosso ou template corrompido: não é culpa do usuário nem do serviço. Vira 500 e alerta.
                     LogarRecusa(logger, (int)resposta.StatusCode, codigo);
                     throw new InvalidOperationException($"face-service recusou a referência ou o limiar enviados ({codigo}).");

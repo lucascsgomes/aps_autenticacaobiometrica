@@ -30,7 +30,8 @@ class PipelineFalso:
         self.vetor = vetor if vetor is not None else vetor_aleatorio(1)
         self.erro = erro
 
-    def extrair_de_imagem(self, _imagem):
+    def extrair_de_imagem(self, _imagem, configuracao=None):
+        self.configuracao_recebida = configuracao
         if self.erro:
             raise self.erro
         return self.vetor

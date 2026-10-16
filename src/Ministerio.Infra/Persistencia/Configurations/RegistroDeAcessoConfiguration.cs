@@ -11,7 +11,7 @@ internal sealed class RegistroDeAcessoConfiguration : IEntityTypeConfiguration<R
     {
         r.ToTable("registros_de_acesso", t =>
         {
-            t.HasCheckConstraint("ck_acesso_evento", "evento IN ('LOGIN_SENHA', 'LOGIN_ROSTO', 'LOGIN_IDENTIFICACAO', 'CONSULTA_NIVEL1', 'CONSULTA_NIVEL2', 'CONSULTA_NIVEL3', 'RELATORIO', 'ALTERACAO_DE_ACESSO')");
+            t.HasCheckConstraint("ck_acesso_evento", "evento IN ('LOGIN_SENHA', 'LOGIN_ROSTO', 'LOGIN_IDENTIFICACAO', 'CONSULTA_NIVEL1', 'CONSULTA_NIVEL2', 'CONSULTA_NIVEL3', 'RELATORIO', 'ALTERACAO_DE_ACESSO', 'ALTERACAO_DE_PROCESSAMENTO', 'EXCLUSAO_DE_CADASTRO')");
             t.HasCheckConstraint("ck_acesso_resultado", "resultado IN ('ACEITO', 'RECUSADO')");
             t.HasCheckConstraint("ck_acesso_motivo", "(resultado = 'RECUSADO') = (motivo IS NOT NULL)");
         });

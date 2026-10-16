@@ -23,6 +23,29 @@ namespace Ministerio.Infra.Persistencia.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Ministerio.Dominio.Acesso.Configuracao", b =>
+                {
+                    b.Property<string>("Chave")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("chave");
+
+                    b.Property<DateTimeOffset>("AtualizadoEm")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("atualizado_em");
+
+                    b.Property<string>("Valor")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("valor");
+
+                    b.HasKey("Chave")
+                        .HasName("pk_configuracoes");
+
+                    b.ToTable("configuracoes", (string)null);
+                });
+
             modelBuilder.Entity("Ministerio.Dominio.Acesso.PropriedadeRural", b =>
                 {
                     b.Property<Guid>("Id")
@@ -449,7 +472,7 @@ namespace Ministerio.Infra.Persistencia.Migrations
 
                     b.ToTable("registros_de_acesso", null, t =>
                         {
-                            t.HasCheckConstraint("ck_acesso_evento", "evento IN ('LOGIN_SENHA', 'LOGIN_ROSTO', 'LOGIN_IDENTIFICACAO', 'CONSULTA_NIVEL1', 'CONSULTA_NIVEL2', 'CONSULTA_NIVEL3', 'RELATORIO', 'ALTERACAO_DE_ACESSO')");
+                            t.HasCheckConstraint("ck_acesso_evento", "evento IN ('LOGIN_SENHA', 'LOGIN_ROSTO', 'LOGIN_IDENTIFICACAO', 'CONSULTA_NIVEL1', 'CONSULTA_NIVEL2', 'CONSULTA_NIVEL3', 'RELATORIO', 'ALTERACAO_DE_ACESSO', 'ALTERACAO_DE_PROCESSAMENTO', 'EXCLUSAO_DE_CADASTRO')");
 
                             t.HasCheckConstraint("ck_acesso_motivo", "(resultado = 'RECUSADO') = (motivo IS NOT NULL)");
 
@@ -531,7 +554,7 @@ namespace Ministerio.Infra.Persistencia.Migrations
 
                             t.HasCheckConstraint("ck_desafio_devolvido", "devolvido_vezes BETWEEN 0 AND 5");
 
-                            t.HasCheckConstraint("ck_desafio_finalidade", "finalidade IN ('CADASTRO', 'LOGIN', 'ACESSO_NIVEL2', 'ACESSO_NIVEL3', 'TROCAR_SENHA', 'RECADASTRO', 'ALTERAR_ACESSO')");
+                            t.HasCheckConstraint("ck_desafio_finalidade", "finalidade IN ('CADASTRO', 'LOGIN', 'ACESSO_NIVEL2', 'ACESSO_NIVEL3', 'TROCAR_SENHA', 'RECADASTRO', 'ALTERAR_ACESSO', 'ALTERAR_PROCESSAMENTO', 'EXCLUIR_CADASTRO')");
 
                             t.HasCheckConstraint("ck_desafio_hash", "hash_operacao IS NULL OR octet_length(hash_operacao) = 32");
 

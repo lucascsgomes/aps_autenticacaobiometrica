@@ -13,6 +13,7 @@ public sealed class MinisterioDbContext(DbContextOptions<MinisterioDbContext> op
     public DbSet<DesafioBiometrico> Desafios => Set<DesafioBiometrico>();
     public DbSet<PropriedadeRural> Propriedades => Set<PropriedadeRural>();
     public DbSet<RegistroDeAcesso> Acessos => Set<RegistroDeAcesso>();
+    public DbSet<Configuracao> Configuracoes => Set<Configuracao>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) =>
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(MinisterioDbContext).Assembly);

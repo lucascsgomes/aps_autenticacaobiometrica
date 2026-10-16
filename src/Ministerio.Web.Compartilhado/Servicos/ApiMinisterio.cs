@@ -113,6 +113,33 @@ public sealed class ApiMinisterio(HttpClient http, SessaoApp sessao) : IDisposab
         return AcaoSensivelAsync<bool>(HttpMethod.Put, $"/v1/admin/usuarios/{usuarioId}/acesso", "ALTERAR_ACESSO", pedido, new Credencial(null, imagem), pedido);
     }
 
+    /// <summary>Exclui o cadastro (e o vetor do rosto) de alguém. Só o rosto do admin vale.</summary>
+    public Task<Resposta<bool>> ExcluirCadastroAsync(Guid usuarioId, byte[] imagem) =>
+        AcaoSensivelAsync<bool>(HttpMethod.Delete, $"/v1/admin/usuarios/{usuarioId}", "EXCLUIR_CADASTRO", new ExcluirCadastroRequest(usuarioId), new Credencial(null, imagem));
+
+    public Task<Resposta<ProcessamentoDto>> ProcessamentoAsync() =>
+        EnviarAsync<ProcessamentoDto>(() => new HttpRequestMessage(HttpMethod.Get, "/v1/admin/processamento"));
+
+    /// <summary>Escolhe como o serviço facial prepara a foto. O rosto do admin confirma, amarrado a estes dois valores.</summary>
+    public Task<Resposta<bool>> AlterarProcessamentoAsync(string preProcessamento, string tratamentoRuido, byte[] imagem)
+    {
+        var pedido = new AlterarProcessamentoRequest(preProcessamento, tratamentoRuido);
+        return AcaoSensivelAsync<bool>(HttpMethod.Put, "/v1/admin/processamento", "ALTERAR_PROCESSAMENTO", pedido, new Credencial(null, imagem), pedido);
+    }
+
+    /// <summary>Exclui a própria conta, com o vetor do rosto. Confirma com a senha ou com o rosto; no sucesso a sessão local acaba junto.</summary>
+    public async Task<Resposta<bool>> ExcluirContaAsync(Credencial credencial)
+    {
+        var id = sessao.Atual!.Usuario.Id;
+        var r = await AcaoSensivelAsync<bool>(HttpMethod.Delete, "/v1/me", "EXCLUIR_CADASTRO", new ExcluirCadastroRequest(id), credencial);
+        if (r.Ok)
+        {
+            await sessao.EncerrarAsync();
+        }
+
+        return r;
+    }
+
     public Task<Resposta<RelatorioResponse>> RelatorioAsync() => EnviarAsync<RelatorioResponse>(() => new HttpRequestMessage(HttpMethod.Get, "/v1/relatorios/resumo"));
 
     public Task<Resposta<byte[]>> BaixarRelatorioAsync() => EnviarAsync<byte[]>(() => new HttpRequestMessage(HttpMethod.Get, "/v1/relatorios/acessos.csv"));

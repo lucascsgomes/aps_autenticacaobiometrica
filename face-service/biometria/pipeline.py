@@ -53,7 +53,7 @@ class PipelineFacial:
             self.configuracao.validar()
             origem, original = carregar_imagem(caminho_imagem)
             etapas = Etapas(self.pasta_resultados, self.configuracao, origem, identificador, operacao)
-            vetor = self._extrair(original, etapas)
+            vetor = self._extrair(original, etapas, self.configuracao)
             return AmostraFacial(vetor, origem, etapas.pasta)
         except (ErroBiometria, OSError, cv2.error) as erro:
             if etapas is not None:
@@ -65,23 +65,26 @@ class PipelineFacial:
                 raise
             raise ErroInterno(str(erro)) from erro
 
-    def extrair_de_imagem(self, original):
-        """Caminho do serviço: imagem já decodificada em memória, nada gravado em disco."""
+    def extrair_de_imagem(self, original, configuracao=None):
+        """Caminho do serviço: imagem já decodificada em memória, nada gravado em disco.
+        `configuracao` troca o pré-processamento e o tratamento de ruído só nesta chamada (o admin escolhe pela API)."""
         try:
-            self.configuracao.validar()
-            return self._extrair(original, EtapasNulas())
+            configuracao = configuracao or self.configuracao
+            configuracao.validar()
+            return self._extrair(original, EtapasNulas(), configuracao)
         except cv2.error as erro:
             raise ErroInterno(str(erro)) from erro
 
-    def _extrair(self, original, etapas):
+    def _extrair(self, original, etapas, configuracao=None):
+        configuracao = configuracao or self.configuracao
         etapas.salvar('01_original', original)
         cinza = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY)
         etapas.salvar('02_cinza', cinza)
-        pre = PRE_PROCESSAMENTOS[self.configuracao.pre_processamento](cinza)
+        pre = PRE_PROCESSAMENTOS[configuracao.pre_processamento](cinza)
         etapas.salvar('03_pre_processamento', pre)
         processada = pre
-        if self.configuracao.tratamento_ruido is not None:
-            processada = TRATAMENTOS_RUIDO[self.configuracao.tratamento_ruido](pre)
+        if configuracao.tratamento_ruido is not None:
+            processada = TRATAMENTOS_RUIDO[configuracao.tratamento_ruido](pre)
             etapas.salvar('04_tratamento_ruido', processada)
         entrada = cv2.cvtColor(processada, cv2.COLOR_GRAY2BGR)
         with _TRAVA_DOS_MODELOS:

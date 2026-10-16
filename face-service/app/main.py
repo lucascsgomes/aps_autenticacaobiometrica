@@ -14,7 +14,14 @@ from app.seguranca import NaoAutorizado, exigir_chave_interna
 from biometria.comparacao import THRESHOLD_COSINE, comparar, corresponde
 from biometria.identificacao import MARGEM_PADRAO, identificar
 from biometria.pipeline import PipelineFacial
-from config import LIMIAR_MAXIMO, LIMIAR_MINIMO, LIMITE_CANDIDATOS, LIMITE_IMAGEM_BYTES, MARGEM_MAXIMA
+from config import (
+    LIMIAR_MAXIMO,
+    LIMIAR_MINIMO,
+    LIMITE_CANDIDATOS,
+    LIMITE_IMAGEM_BYTES,
+    MARGEM_MAXIMA,
+    ConfiguracaoProcessamento,
+)
 from erros import ErroBiometria
 
 STATUS_POR_CODIGO = {
@@ -23,6 +30,7 @@ STATUS_POR_CODIGO = {
     'INVALID_THRESHOLD': 400,
     'INVALID_MARGIN': 400,
     'INVALID_CANDIDATES': 400,
+    'INVALID_PROCESSING': 400,
     'IMAGE_TOO_LARGE': 413,
     'NO_FACE_DETECTED': 422,
     'MULTIPLE_FACES': 422,
@@ -47,6 +55,18 @@ async def ciclo_de_vida(app: FastAPI):
     except ErroBiometria:  # modelos ausentes: o serviço sobe, mas /ready devolve 503
         pass
     yield
+
+
+def _configuracao(preprocessing: str | None, noise: str | None):
+    """Escolha do admin, mandada pela API a cada chamada. Sem nenhuma, vale a configuração do serviço.
+    noise='none' desliga o tratamento de ruído."""
+    if preprocessing is None and noise is None:
+        return None
+    base = ConfiguracaoProcessamento()
+    escolhida = ConfiguracaoProcessamento(preprocessing or base.pre_processamento,
+                                          None if noise == 'none' else (noise or base.tratamento_ruido))
+    escolhida.validar()
+    return escolhida
 
 
 def obter_pipeline(request: Request) -> PipelineFacial:
@@ -102,23 +122,24 @@ def ready(request: Request):
 
 # `def` síncrono de propósito: o OpenCV bloqueia, então roda no threadpool do FastAPI.
 @app.post('/internal/v1/face/enroll', response_model=EnrollResposta, dependencies=[Depends(exigir_chave_interna)])
-def enroll(request: Request, image: UploadFile = File(...), pipeline: PipelineFacial = Depends(obter_pipeline)):
+def enroll(request: Request, image: UploadFile = File(...), preprocessing: str | None = Form(default=None),
+           noise: str | None = Form(default=None), pipeline: PipelineFacial = Depends(obter_pipeline)):
     imagem = decodificar_imagem(_ler_limitado(image))
-    vetor = pipeline.extrair_de_imagem(imagem)
+    vetor = pipeline.extrair_de_imagem(imagem, _configuracao(preprocessing, noise))
     return EnrollResposta(embedding_b64=embedding.codificar(vetor), dim=embedding.DIM,
                           request_id=request.state.request_id)
 
 
 @app.post('/internal/v1/face/verify', response_model=VerifyResposta, dependencies=[Depends(exigir_chave_interna)])
 def verify(request: Request, image: UploadFile = File(...), reference_b64: str = Form(...),
-           threshold: float | None = Form(default=None),
-           pipeline: PipelineFacial = Depends(obter_pipeline)):
+           threshold: float | None = Form(default=None), preprocessing: str | None = Form(default=None),
+           noise: str | None = Form(default=None), pipeline: PipelineFacial = Depends(obter_pipeline)):
     limiar = THRESHOLD_COSINE if threshold is None else threshold
     if not LIMIAR_MINIMO <= limiar <= LIMIAR_MAXIMO:
         raise ErroBiometria('Limiar fora da faixa permitida (0,300 a 0,900).', codigo='INVALID_THRESHOLD')
     referencia = embedding.decodificar(reference_b64)
     imagem = decodificar_imagem(_ler_limitado(image))
-    vetor = pipeline.extrair_de_imagem(imagem)
+    vetor = pipeline.extrair_de_imagem(imagem, _configuracao(preprocessing, noise))
     score = comparar(pipeline.reconhecedor.modelo, referencia, vetor)
     return VerifyResposta(match=corresponde(score, limiar), score=round(score, 6), threshold=limiar,
                           request_id=request.state.request_id)
@@ -127,6 +148,7 @@ def verify(request: Request, image: UploadFile = File(...), reference_b64: str =
 @app.post('/internal/v1/face/identify', response_model=IdentifyResposta, dependencies=[Depends(exigir_chave_interna)])
 def identify(request: Request, image: UploadFile = File(...), candidates: str = Form(...),
              threshold: float | None = Form(default=None), margin: float | None = Form(default=None),
+             preprocessing: str | None = Form(default=None), noise: str | None = Form(default=None),
              pipeline: PipelineFacial = Depends(obter_pipeline)):
     """1 para N: `candidates` é um JSON `[{"id": ..., "embedding_b64": ...}]`.
     Só devolve o id quando há um vencedor claro."""
@@ -138,7 +160,7 @@ def identify(request: Request, image: UploadFile = File(...), candidates: str = 
         raise ErroBiometria('Margem fora da faixa permitida (0 a 0,500).', codigo='INVALID_MARGIN')
     lista = _ler_candidatos(candidates)
     imagem = decodificar_imagem(_ler_limitado(image))
-    vetor = pipeline.extrair_de_imagem(imagem)
+    vetor = pipeline.extrair_de_imagem(imagem, _configuracao(preprocessing, noise))
     r = identificar(pipeline.reconhecedor.modelo, lista, vetor, limiar, folga)
     return IdentifyResposta(identified=r.identificado, candidate_id=r.candidato, score=round(r.score, 6),
                             second_score=None if r.segundo_score is None else round(r.segundo_score, 6),

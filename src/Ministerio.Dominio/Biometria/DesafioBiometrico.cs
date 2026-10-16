@@ -13,6 +13,8 @@ public enum FinalidadeDoDesafio
     TrocarSenha,
     Recadastro,
     AlterarAcesso,
+    AlterarProcessamento,
+    ExcluirCadastro,
 }
 
 public enum MetodoDoDesafio

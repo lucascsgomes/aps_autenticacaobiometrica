@@ -22,7 +22,7 @@ class ConfiguracaoProcessamento:
             if valor is None and opcoes is TRATAMENTOS_RUIDO:
                 continue
             if not isinstance(valor, str) or valor not in opcoes:
-                raise ErroBiometria(f"Configuração inexistente: {valor!r}. Opções: {', '.join(opcoes)}")
+                raise ErroBiometria(f"Configuração inexistente: {valor!r}. Opções: {', '.join(opcoes)}", codigo='INVALID_PROCESSING')
 
 
 # --- Configuração do serviço HTTP (lida do ambiente, nunca do código) ---

@@ -10,6 +10,7 @@ using Ministerio.Infra.Acesso;
 using Ministerio.Infra.Persistencia;
 using Microsoft.EntityFrameworkCore;
 using Ministerio.Infra.Autenticacao;
+using Ministerio.Infra.Cadastro;
 using Ministerio.Infra.Facial;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.Options;
@@ -31,6 +32,7 @@ internal static class CredenciaisEndpoints
         me.MapGet("/biometria", Biometria).RequireRateLimiting(Limites.Leitura);
         me.MapPut("/biometria", TrocarRosto).RequireRateLimiting(Limites.BiometriaAutenticada).WithMetadata(new RequestSizeLimitAttribute(LimiteDuasFotos));
         me.MapDelete("/biometria", ExcluirRosto).RequireRateLimiting(Limites.BiometriaAutenticada);
+        me.MapDelete(string.Empty, ExcluirConta).RequireRateLimiting(Limites.BiometriaAutenticada).WithMetadata(new RequestSizeLimitAttribute(Imagens.TamanhoMaximoDaRequisicao));
         me.MapPut("/senha", TrocarSenha).RequireRateLimiting(Limites.BiometriaAutenticada).WithMetadata(new RequestSizeLimitAttribute(Imagens.TamanhoMaximoDaRequisicao));
         return rotas;
     }
@@ -114,6 +116,40 @@ internal static class CredenciaisEndpoints
 
         await stepUp.ConfirmarSenhaAsync(id, corpo.Senha, cancelamento);
         await credenciais.ExcluirRostoAsync(id, cancelamento);
+        return Results.NoContent();
+    }
+
+    // Apaga a conta e o vetor do rosto. multipart: desafio_id (EXCLUIR_CADASTRO com o próprio usuario_id) e a credencial (image, ou senha).
+    private static async Task<IResult> ExcluirConta(
+        HttpContext http,
+        ClaimsPrincipal usuario,
+        MinisterioDbContext db,
+        ServicoDeStepUp stepUp,
+        ServicoDeExclusao exclusao,
+        ServicoDeAuditoria auditoria,
+        CancellationToken cancelamento)
+    {
+        if (UsuarioDoToken(usuario) is not { } id)
+        {
+            return Results.Unauthorized();
+        }
+
+        var (confirmacao, erros) = await StepUpEndpoints.LerConfirmacaoAsync(http.Request, cancelamento);
+        if (confirmacao is null)
+        {
+            throw new ConfirmacaoNecessariaException("EXCLUIR_CADASTRO");
+        }
+
+        if (erros.Count > 0)
+        {
+            return Validacao.Problema(erros);
+        }
+
+        var nome = await db.Usuarios.AsNoTracking().Where(u => u.Id == id).Select(u => u.Nome).SingleAsync(cancelamento);
+        await stepUp.ConfirmarAsync(id, FinalidadeDoDesafio.ExcluirCadastro, AcoesSensiveis.Canonico(id, null, null), confirmacao.DesafioId, confirmacao.Senha, confirmacao.Imagem, http.TraceIdentifier, cancelamento);
+        await exclusao.ExcluirAsync(id, cancelamento);
+        // Sem usuário: ele já não existe. O nome vai no detalhe para o relatório dizer quem saiu.
+        await auditoria.RegistrarAsync(null, EventoDeAcesso.ExclusaoDeCadastro, ResultadoDoAcesso.Aceito, null, http.Connection.RemoteIpAddress, $"{nome} excluiu a própria conta");
         return Results.NoContent();
     }
 

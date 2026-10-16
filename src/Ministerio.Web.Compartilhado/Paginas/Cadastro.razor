@@ -20,15 +20,12 @@
                 <label>E-mail
                     <input @bind="_email" type="email" autocomplete="email" />
                 </label>
-                <label>Celular (opcional)
-                    <input @bind="_celular" inputmode="tel" placeholder="+5511999999999" />
-                </label>
                 <label>Senha (mínimo 10 caracteres)
                     <input @bind="_senha" type="password" autocomplete="new-password" />
                 </label>
                 <label class="marcar">
                     <input type="checkbox" @bind="_aceito" />
-                    <span>Autorizo o uso do meu rosto para entrar na conta e confirmar transferências.</span>
+                    <span>Autorizo o uso do meu rosto para entrar na conta e abrir as informações restritas. Posso excluí-lo quando quiser.</span>
                 </label>
                 @if (_erro is not null)
                 {
@@ -84,7 +81,6 @@
     private string _nome = "";
     private string _cpf = "";
     private string _email = "";
-    private string _celular = "";
     private string _senha = "";
     private bool _aceito;
     private bool _retomando;
@@ -108,7 +104,7 @@
                 _nome.Trim(),
                 Formato.SoDigitos(_cpf),
                 _email.Trim(),
-                string.IsNullOrWhiteSpace(_celular) ? null : _celular.Trim(),
+                null,
                 _senha,
                 new ConsentimentoBiometricoDto(true, VersaoDoTermo));
             var r = await Api.RegistrarAsync(dados);

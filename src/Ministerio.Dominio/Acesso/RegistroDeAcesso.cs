@@ -10,6 +10,8 @@ public enum EventoDeAcesso
     ConsultaNivel3,
     Relatorio,
     AlteracaoDeAcesso,
+    AlteracaoDeProcessamento,
+    ExclusaoDeCadastro,
 }
 
 public enum ResultadoDoAcesso
